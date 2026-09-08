@@ -1,1 +1,20 @@
-
+name: Prepare project files
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify and expand the approved source archive
+        run: |
+          test ! -e package.json
+          echo '5aa8778e174e8d598bac485cc805c592a978ac6febd595c739df5e004d98cbaa  reworld-source.zip' | sha256sum -c -
+          unzip -q reworld-source.zip
+          git rm reworld-source.zip
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Expand validated reworld application source'
+          git push origin HEAD:main
