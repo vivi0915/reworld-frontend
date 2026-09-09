@@ -5,17 +5,18 @@ import {
   Check,
   ChevronRight,
   CircleUserRound,
-  Crosshair,
+  BriefcaseBusiness,
+  Fish,
+  ChartPie,
+  Crown,
+  Shuffle,
+  LogIn,
   History,
   Home,
-  LockKeyhole,
   Martini,
-  Shield,
   Sparkles,
   Swords,
   Unlock,
-  WandSparkles,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -23,13 +24,14 @@ import { MemberPanel } from "@/components/member-panel";
 import { MenuBoard } from "@/components/menu-board";
 import type { Member } from "@/lib/member-types";
 
-type Role = "法師" | "射手" | "打野" | "戰士";
+type Role = "高級牛馬" | "摸魚大師" | "畫餅充飢" | "人生勝利組";
 type Tab = "home" | "roles" | "history" | "menu" | "member";
 type DrawRecord = {
-  id: number;
-  role: Role;
+  id: number | string;
+  role: string;
   reward: string;
   createdAt: string;
+  saved?: boolean;
 };
 
 const roles: Array<{
@@ -37,12 +39,12 @@ const roles: Array<{
   code: string;
   desc: string;
   color: string;
-  Icon: typeof WandSparkles;
+  Icon: typeof Crown;
 }> = [
-  { name: "法師", code: "AP", desc: "掌控變化｜風味實驗", color: "#23a7ff", Icon: WandSparkles },
-  { name: "射手", code: "AD", desc: "精準直覺｜清爽俐落", color: "#16e0bc", Icon: Crosshair },
-  { name: "打野", code: "Jungle", desc: "探索未知｜驚喜路線", color: "#a861ff", Icon: Zap },
-  { name: "戰士", code: "Top", desc: "正面迎戰｜濃烈直接", color: "#ff7048", Icon: Shield },
+  { name: "高級牛馬", code: "01", desc: "努力滿格，今晚犒賞自己", color: "#23a7ff", Icon: BriefcaseBusiness },
+  { name: "摸魚大師", code: "02", desc: "忙裡偷閒，快樂準時下班", color: "#16e0bc", Icon: Fish },
+  { name: "畫餅充飢", code: "03", desc: "夢想很大，先來一杯再說", color: "#a861ff", Icon: ChartPie },
+  { name: "人生勝利組", code: "04", desc: "自帶光環，今晚由你閃耀", color: "#ffb648", Icon: Crown },
 ];
 
 export default function HomePage() {
@@ -61,6 +63,33 @@ export default function HomePage() {
   const [records, setRecords] = useState<DrawRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const accountRevision = useRef(0);
+  const [randomizing, setRandomizing] = useState(false);
+  const [litRole, setLitRole] = useState<Role | null>(null);
+  const randomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actionBusy = useRef(false);
+  useEffect(() => () => { if (randomTimer.current) clearTimeout(randomTimer.current); }, []);
+
+  function randomRole() {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
+    setRandomizing(true); setResult(null); setSelectedRole(null);
+    const target = crypto.getRandomValues(new Uint8Array(1))[0] % roles.length;
+    const lastStep = 12 + target;
+    let step = 0;
+    const tick = () => {
+      setLitRole(roles[step % roles.length].name);
+      if (step === lastStep) {
+        setSelectedRole(roles[target].name);
+        setLitRole(null); setRandomizing(false); actionBusy.current = false;
+        toast.success(`你的角色是：${roles[target].name}`);
+        return;
+      }
+      step++;
+      randomTimer.current = setTimeout(tick, 70 + Math.pow(step / lastStep, 3) * 240);
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) step = lastStep;
+    tick();
+  }
   const refreshMember = useCallback(async () => {
     const revision = ++accountRevision.current;
     try {
@@ -122,8 +151,8 @@ export default function HomePage() {
   }
 
   async function drawReward() {
-    if (!member) { setTab("member"); return; }
-    if (!selectedRole || drawing) return;
+    if (!selectedRole || actionBusy.current) return;
+    actionBusy.current = true;
     const revision = accountRevision.current;
     setDrawing(true);
     setResult(null);
@@ -141,11 +170,12 @@ export default function HomePage() {
       await new Promise((resolve) => setTimeout(resolve, 900));
       if (revision !== accountRevision.current) return;
       setResult(data.record);
-      toast.success("獎勵已存入你的冒險紀錄");
+      toast.success(data.record.saved ? "獎勵已存入你的冒險紀錄" : "獲得角色專屬獎勵！");
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setDrawing(false);
+      actionBusy.current = false;
     }
   }
 
@@ -182,9 +212,9 @@ export default function HomePage() {
               >
                 <span className="unlock-rings" aria-hidden="true" />
                 <span className="unlock-icon">
-                  {unlocked ? <Unlock size={38} /> : <LockKeyhole size={38} />}
+                  {unlocked ? <Unlock size={38} /> : <LogIn size={38} />}
                 </span>
-                <strong>{unlocking ? "驗證中" : unlocked ? "已解鎖" : "一鍵解鎖"}</strong>
+                <strong>{unlocking ? "驗證中" : unlocked ? "已解鎖" : "登入 re:world"}</strong>
                 <small>{unlocking ? "SCANNING ACCESS" : unlocked ? "ACCESS GRANTED" : "TAP TO ACCESS"}</small>
               </button>
 
@@ -197,7 +227,7 @@ export default function HomePage() {
                 <span className="mission-icon"><Swords size={23} /></span>
                 <span>
                   <small>NEXT MISSION</small>
-                  <strong>{selectedRole ? `目前屬性：${selectedRole}` : "選擇你的戰鬥屬性"}</strong>
+                  <strong>{selectedRole ? `目前角色：${selectedRole}` : "選擇你的角色"}</strong>
                 </span>
                 <ChevronRight size={21} />
               </button>
@@ -207,14 +237,17 @@ export default function HomePage() {
           {tab === "roles" && (
             <div className="screen roles-screen">
               <div className="eyebrow">ROLE SELECT · 02</div>
-              <h1>選擇你的屬性</h1>
-              <p className="screen-copy">不同屬性，將開啟不同的獎勵卡池。</p>
+              <h1>選擇你的角色</h1>
+              <p className="screen-copy">點選角色，獲得角色專屬獎勵</p>
 
               <div className="role-grid">
                 {roles.map(({ name, code, desc, color, Icon }) => (
                   <button
                     key={name}
-                    className={`role-card ${selectedRole === name ? "is-selected" : ""}`}
+                    className={`role-card ${selectedRole === name ? "is-selected" : ""} ${litRole === name ? "is-lit" : ""}`}
+                    disabled={drawing || randomizing}
+                    aria-pressed={selectedRole === name}
+                    aria-label={name}
                     style={{ "--role-color": color } as React.CSSProperties}
                     onClick={() => { setSelectedRole(name); setResult(null); }}
                   >
@@ -228,18 +261,23 @@ export default function HomePage() {
               </div>
 
               {!result ? (
-                <button className="primary-action" disabled={drawing || memberLoading || (Boolean(member) && !selectedRole)} onClick={drawReward}>
+                <button className="primary-action" disabled={drawing || randomizing || !selectedRole} onClick={drawReward}>
                   <Sparkles size={18} />
-                  {memberLoading ? "正在讀取會員…" : !member ? "登入會員後抽取獎勵" : drawing ? "正在解析獎勵資料…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇屬性"}
+                  {drawing ? "正在抽取獎勵…" : randomizing ? "正在選擇角色…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇角色"}
                 </button>
               ) : (
                 <div className="reward-module" style={{ "--role-color": currentRole?.color } as React.CSSProperties}>
                   <span>REWARD ACQUIRED</span>
                   <strong>{result.reward}</strong>
-                  <p>{result.role}專屬獎勵已記錄</p>
+                  <p>{result.role}專屬獎勵{result.saved ? "已記錄" : "已獲得"}</p>
                   <button onClick={() => setTab("history")}>查看冒險紀錄 <ChevronRight size={16} /></button>
                 </div>
               )}
+              <button className="random-role-action" onClick={randomRole} disabled={drawing || randomizing}>
+                <Shuffle size={20} />{randomizing ? "命運選角中…" : "隨機選擇角色"}
+              </button>
+              <p className="guest-draw-note" role="status">{randomizing ? "燈框正在選擇角色…" : selectedRole ? `已選擇：${selectedRole}` : "四種角色，讓命運替你決定。"}</p>
+              {!member && <p className="guest-draw-note">不用登入也能抽獎；登入後的抽獎會保存至冒險紀錄。</p>}
             </div>
           )}
 
@@ -254,7 +292,7 @@ export default function HomePage() {
               {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>登入／註冊</button></div> : <>
               <div className="stats-row">
                 <div><span>總抽取</span><strong>{totalDraws}</strong></div>
-                <div><span>主要屬性</span><strong>{favoriteRole ?? "—"}</strong></div>
+                <div><span>主要角色</span><strong>{favoriteRole ?? "—"}</strong></div>
               </div>
 
               <div className="record-list">
@@ -264,11 +302,11 @@ export default function HomePage() {
                   <div className="empty-state">
                     <History size={28} />
                     <strong>尚無冒險紀錄</strong>
-                    <span>完成第一次屬性抽卡後會顯示在這裡。</span>
+                    <span>完成第一次角色抽卡後會顯示在這裡。</span>
                   </div>
                 )}
                 {!recordsLoading && !historyError && records.map((record) => {
-                  const role = roles.find((item) => item.name === record.role)!;
+                  const role = roles.find((item) => item.name === record.role) ?? roles[0];
                   const RoleIcon = role.Icon;
                   return (
                     <article className="record-row" key={record.id}>
@@ -291,7 +329,7 @@ export default function HomePage() {
 
         <nav className="bottom-nav" aria-label="主要導覽">
           <button className={tab === "home" ? "active" : ""} onClick={() => setTab("home")}><Home /><span>首頁</span></button>
-          <button className={tab === "roles" ? "active" : ""} onClick={() => setTab("roles")}><Swords /><span>選擇屬性</span></button>
+          <button className={tab === "roles" ? "active" : ""} onClick={() => setTab("roles")}><Swords /><span>選擇角色</span></button>
           <button className={tab === "menu" ? "active" : ""} onClick={() => setTab("menu")}><Martini /><span>菜單</span></button>
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}><History /><span>冒險紀錄</span></button>
           <button className={tab === "member" ? "active" : ""} onClick={() => setTab("member")}><CircleUserRound /><span>會員</span></button>

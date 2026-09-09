@@ -47,7 +47,7 @@ export function MemberPanel({ member, loading, error, onRefresh }: { member: Mem
   return <div className="screen member-screen">
     <div className="eyebrow">PLAYER ID · 05</div>
     <h1>{member ? "會員資料" : "加入 re:world"}</h1>
-    <p className="screen-copy">{member ? "你的會員資料與冒險紀錄，隨帳號一起保存。" : "登入或註冊，保存每一次屬性選擇與獎勵。"}</p>
+    <p className="screen-copy">{member ? "你的會員資料與冒險紀錄，隨帳號一起保存。" : "登入或註冊，保存每一次角色選擇與獎勵。"}</p>
     {loading ? <p className="empty-state" role="status">正在讀取會員資料…</p> : error ? <div className="empty-state"><p role="alert">{error}</p><Button onClick={() => { void onRefresh().catch(() => {}); }}>重新讀取</Button></div> : <>
       {member ? <div className="member-card"><CircleUserRound size={38} /><div><strong>{member.displayName}</strong><span>@{member.username}</span><small>加入日期：{member.createdAt.slice(0, 10)}</small></div></div> : <Tabs value={mode} onValueChange={value => { setMode(value); setMessage(""); }} className="auth-tabs"><TabsList aria-label="會員登入或註冊"><TabsTrigger value="login" disabled={busy}>登入</TabsTrigger><TabsTrigger value="register" disabled={busy}>註冊</TabsTrigger></TabsList></Tabs>}
       <form className="member-form" onSubmit={handleSubmit} key={`${member?.id ?? "guest"}-${mode}`}>

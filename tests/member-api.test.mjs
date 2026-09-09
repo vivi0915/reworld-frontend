@@ -20,6 +20,14 @@ test("members: registration, isolation, profile, login, logout and authorization
   try {
     assert.equal((await call("/api/member")).data.member, null);
     assert.equal((await call("/api/draws")).status, 401);
+    for (const role of ["高級牛馬", "摸魚大師", "畫餅充飢", "人生勝利組"]) {
+      const guest = await call("/api/draws", "POST", { role, memberId: "forged" });
+      assert.equal(guest.status, 201);
+      assert.equal(guest.data.record.role, role);
+      assert.equal(guest.data.record.saved, false);
+    }
+    assert.equal((await call("/api/draws", "POST", { role: "其他" })).status, 400);
+    assert.equal((await call("/api/draws", "POST", { role: "高級牛馬" }, "", { Origin: "https://untrusted.example" })).status, 403);
     assert.equal((await call("/api/member/register", "POST", { username: names[0], password, displayName: "測試會員" }, "", { Origin: "https://untrusted.example" })).status, 403);
     assert.equal((await call("/api/member/register", "POST", { username: names[0], password: "short", displayName: "測試會員" })).status, 400);
     const a = await call("/api/member/register", "POST", { username: names[0], password, displayName: "測試會員甲", accessRole: "admin" });
@@ -40,11 +48,11 @@ test("members: registration, isolation, profile, login, logout and authorization
     assert.equal(update.status, 200);
     assert.equal(update.data.member.accessRole, "member");
     assert.equal((await call("/api/member", "GET", undefined, cookieB)).data.member.displayName, "測試會員乙");
-    const draw = await call("/api/draws", "POST", { role: "法師", memberId: profileB.id, memberName: "冒用" }, cookieA);
+    const draw = await call("/api/draws", "POST", { role: "高級牛馬", memberId: profileB.id, memberName: "冒用" }, cookieA);
     assert.equal(draw.status, 201);
     assert.equal((await call(`/api/draws?memberId=${profileA.id}`, "GET", undefined, cookieB)).data.records.length, 0);
     const historyA = (await call("/api/draws", "GET", undefined, cookieA)).data;
-    assert.equal(historyA.total, 1); assert.equal(historyA.favoriteRole, "法師");
+    assert.equal(historyA.total, 1); assert.equal(historyA.favoriteRole, "高級牛馬");
     assert.equal((await call("/api/draws", "POST", { role: "其他" }, cookieA)).status, 400);
     assert.equal((await call("/api/member/login", "POST", { username: names[0], password: "wrong-password-123" })).status, 401);
     assert.equal((await call("/api/member/logout", "POST", undefined, cookieA)).status, 200);
