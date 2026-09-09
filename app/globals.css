@@ -548,3 +548,21 @@ button:focus-visible { outline: 2px solid #7fd6ff; outline-offset: 3px; }
     transition-duration: .01ms !important;
   }
 }
+
+/* Role roulette: one bright frame moves between the four cards. */
+.role-card.is-lit, .role-card.is-selected::after {
+  border-color: var(--role-color);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--role-color) 50%, transparent);
+}
+.role-card.is-lit {
+  background: radial-gradient(circle, color-mix(in srgb, var(--role-color) 38%, #0b1727), #0b1727);
+  box-shadow: inset 0 0 0 3px var(--role-color), inset 0 0 38px color-mix(in srgb, var(--role-color) 45%, transparent);
+}
+.role-card.is-lit::after { border: 2px solid #e9fbff; }
+.role-card:disabled { cursor: wait; }
+.role-card strong { font-size: 1.125rem; letter-spacing: .025em; }
+.role-card small { max-width: 90%; text-align: center; font-size: .875rem; line-height: 1.5; color: #9eb2c9; }
+.role-code { font-size: .75rem; }
+.random-role-action { width: 100%; min-height: 52px; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #8d71ee; border-radius: 5px 15px 5px 15px; color: #e6dcff; background: linear-gradient(110deg, #241b40, #11172c); font-weight: 750; cursor: pointer; }
+.random-role-action:disabled { opacity: .65; cursor: wait; }
+.guest-draw-note { color: #9aafc8; font-size: .875rem; line-height: 1.6; text-align: center; margin: 12px 0 0; }
