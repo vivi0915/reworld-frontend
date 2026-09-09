@@ -47,7 +47,7 @@ export function account(value: unknown) {
   return normalized;
 }
 export function password(value: unknown) {
-  if (typeof value !== "string" || value.length < 12 || value.length > 128) throw new ApiError(400, "密碼請使用 12–128 個字元。");
+  if (typeof value !== "string" || value.length < 8 || value.length > 128) throw new ApiError(400, "密碼請使用 8–128 個字元。");
   return value;
 }
 export function profile(payload: Record<string, unknown>) {
