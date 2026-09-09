@@ -53,8 +53,8 @@ export function MemberPanel({ member, loading, error, onRefresh }: { member: Mem
       <form className="member-form" onSubmit={handleSubmit} key={`${member?.id ?? "guest"}-${mode}`}>
         {!member && <label>帳號<Input name="username" required minLength={2} maxLength={24} autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="可使用暱稱或本名" disabled={busy} /><small>2–24 個中文、英文、數字或底線；英文不分大小寫。</small></label>}
         {(member || mode === "register") && <label>暱稱或本名<Input name="displayName" required maxLength={40} autoComplete="nickname" defaultValue={member?.displayName} placeholder="希望我們怎麼稱呼你？" disabled={busy} /></label>}
-        {!member && <label>密碼<Input name="password" type="password" required minLength={12} maxLength={128} autoComplete={mode === "register" ? "new-password" : "current-password"} placeholder="至少 12 個字元" disabled={busy} /></label>}
-        {!member && mode === "register" && <label>確認密碼<Input name="confirmPassword" type="password" required minLength={12} maxLength={128} autoComplete="new-password" placeholder="再次輸入密碼" disabled={busy} /></label>}
+        {!member && <label>密碼<Input name="password" type="password" required minLength={8} maxLength={128} autoComplete={mode === "register" ? "new-password" : "current-password"} placeholder="至少 8 個字元" disabled={busy} /></label>}
+        {!member && mode === "register" && <label>確認密碼<Input name="confirmPassword" type="password" required minLength={8} maxLength={128} autoComplete="new-password" placeholder="再次輸入密碼" disabled={busy} /></label>}
         {(member || mode === "register") && <>
           <label>聯絡電話 <span>選填</span><Input name="phone" type="tel" maxLength={24} autoComplete="tel" defaultValue={member?.phone} disabled={busy} /></label>
           <label>Email <span>選填</span><Input name="email" type="email" maxLength={254} autoComplete="email" defaultValue={member?.email} disabled={busy} /></label>
