@@ -1,25 +1,25 @@
-import { ApiError, apiError, database, json, readBody, requireMember } from "@/lib/member-auth";
+import { ApiError, apiError, database, currentMember, json, readBody, requireMember } from "@/lib/member-auth";
 
-const roles = ["法師", "射手", "打野", "戰士"] as const;
+const roles = ["高級牛馬", "摸魚大師", "畫餅充飢", "人生勝利組"] as const;
 type Role = (typeof roles)[number];
 
 const rewardPools: Record<Role, Array<{ label: string; weight: number }>> = {
-  法師: [
+  高級牛馬: [
     { label: "本次消費 9 折", weight: 20 },
     { label: "魔力 Shot 一杯", weight: 35 },
     { label: "指定調酒升級", weight: 45 },
   ],
-  射手: [
+  摸魚大師: [
     { label: "本次消費 9 折", weight: 20 },
     { label: "精準 Shot 一杯", weight: 35 },
     { label: "指定調酒升級", weight: 45 },
   ],
-  打野: [
+  畫餅充飢: [
     { label: "本次消費 9 折", weight: 20 },
     { label: "隱藏 Shot 一杯", weight: 35 },
     { label: "神秘小食一份", weight: 45 },
   ],
-  戰士: [
+  人生勝利組: [
     { label: "本次消費 9 折", weight: 20 },
     { label: "勇者 Shot 一杯", weight: 35 },
     { label: "指定調酒升級", weight: 45 },
@@ -50,10 +50,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const payload = await readBody(request);
-    const member = await requireMember(request);
+    const member = await currentMember(request);
     const role = payload.role as Role;
-    if (!roles.includes(role)) throw new ApiError(400, "請選擇有效屬性。");
-    const record = await database().prepare("INSERT INTO reward_draws (member_id, member_name, role, reward) VALUES (?, ?, ?, ?) RETURNING id, role, reward, created_at AS createdAt").bind(member.id, member.displayName, role, chooseReward(role)).first();
-    return json({ record }, 201);
+    if (!roles.includes(role)) throw new ApiError(400, "請選擇有效角色。");
+    const reward = chooseReward(role);
+    if (!member) return json({ record: { id: crypto.randomUUID(), role, reward, createdAt: new Date().toISOString(), saved: false } }, 201);
+    const record = await database().prepare("INSERT INTO reward_draws (member_id, member_name, role, reward) VALUES (?, ?, ?, ?) RETURNING id, role, reward, created_at AS createdAt").bind(member.id, member.displayName, role, reward).first();
+    return json({ record: { ...record, saved: true } }, 201);
   } catch (error) { return apiError(error); }
 }
