@@ -1,0 +1,2461 @@
+diff --git a/AGENTS.md b/AGENTS.md
+new file mode 100644
+index 0000000..04df2da
+--- /dev/null
++++ b/AGENTS.md
+@@ -0,0 +1,8 @@
++# Reworld development
++
++- GitHub vivi0915/reworld-frontend is the canonical source. Reuse this checkout and commit history. Avoid export copies and repeated local dependency installations; prefer Actions for CI.
++- Preserve the existing visual style and Guest access. Do not build menu/card CMS.
++- Never commit credentials, password hashes from real accounts, database files, member exports, Sites metadata or private provisioning migrations.
++- Preserve applied migrations and production data. The current Sites deployment has a private administrator provisioning migration 0003 not included here; coordinate future migration numbering (0004 onward) when updating that deployment.
++- Run typecheck, lint and npm test. Tests must use disposable data, never production accounts.
++- The current chatgpt.site production deployment is separate from optional Cloudflare deployment. Do not claim GitHub pushes update it automatically. Cloudflare deployment stays disabled until its target and secrets are configured.
+diff --git a/OPERATIONS.md b/OPERATIONS.md
+new file mode 100644
+index 0000000..925ae6b
+--- /dev/null
++++ b/OPERATIONS.md
+@@ -0,0 +1,41 @@
++# Reworld Player / Operations
++
++## Delivery and migrations
++
++The existing app, menu and class/draw visuals remain in place. `drizzle/0002_player_operations.sql` is an additive migration over 0000/0001, with a matching Drizzle snapshot and journal. It preserves existing members and draws, gives legacy accounts a Player ID, and leaves their phone numbers **unverified**. Never infer account ownership from a legacy contact phone. New verified phone accounts are unique; existing password accounts can still log in. New password registration is disabled.
++
++Apply migrations to a backed-up staging database before production. Sites packages migrations with the build. For other Worker deployments, apply the same migration files through that deployment's D1 migration process. Do not manually run 0002 twice or replace the production database. No live database migration was run by the local tests.
++
++Initial settings: store online, draw enabled, registration enabled, door access disabled, PIN NULL, display duration 15 seconds. Settings writes and their audit entries use D1 batch transactions. Public settings refresh every 10 seconds; each ACCESS and draw request validates current server settings. An already disclosed PIN cannot be revoked from a person's memory; disabling access blocks subsequent requests. Door PIN changes here must match the code configured separately on the physical offline lock.
++
++## SMS integration still required
++
++There is deliberately no built-in SMS vendor or test-code login in production. With no SMS configuration, send/verify fail closed with a helpful Guest message. Set a Worker service binding `SMS` and a secret `OTP_SECRET` of at least 32 characters after selecting a vendor. The SMS adapter owns the vendor credentials and implements:
++
++- `POST https://sms.internal/send`
++- JSON `{ to: "+8869xxxxxxxx", message: "…", idempotencyKey: "challenge UUID" }`
++- 2xx only after the provider accepts delivery; non-2xx on failure.
++- Honor idempotency keys and never log messages, codes or phone numbers in diagnostic output.
++
++The app times out after 10 seconds and only enables verification after successful transport acceptance. Actual Taiwan SMS delivery, provider error handling, sender registration and delivery quality must be tested after configuring the adapter. No SMS was sent by the automated tests.
++
++OTP: six random digits, HMAC-SHA256 storage with the server secret, five-minute expiry, 60-second resend cooldown, maximum five wrong attempts per challenge, five sends per phone/hour and twenty per IP/hour, plus verification rate limits. Resending supersedes previous challenges. Verification consumes the code atomically. Phone formats `09xxxxxxxx` and `+8869xxxxxxxx` normalize to E.164. Sessions use hashed random tokens and a 90-day HttpOnly/SameSite=Lax cookie (Secure outside localhost). Suspended users cannot authenticate or access protected records; suspension revokes existing sessions. Existing session expiry is retained until next login.
++
++## Admin access
++
++`/admin` and every `/api/admin/*` endpoint check an active database-backed admin role. Use an existing authorized administrator. If none exists, a deployment maintainer must promote one specifically verified existing account with a parameterized database operation; there is no public bootstrap route, default password, first-user promotion, or client role assignment. Admin accounts cannot be suspended through member management.
++
++The console includes four toggles, maintenance text, blank masked PIN replacement input, explicit PIN clearing, display duration, Taiwan-day statistics, phone/Player ID search, member histories, suspend/unsuspend and paginated audit/access logs. The PIN is not returned by admin settings, logs, initial HTML or public configuration. Only a successful POST to `/api/access` returns it, with no-store headers. Guest cookies use random identifiers; logs store only their hash. Guest draws are counted separately and cannot be claimed by submitting a client member ID.
++
++## Rewards
++
++Existing `reward_draws.used` and reward content remain intact. `reward_claims` supports unlocked/claimed/expired states for future member rewards. There is intentionally no automatic reward grant or claim endpoint until reward and redemption rules are defined. Guest pre-registration rewards are not automatically attached to a later account. Class selections made while logged in are saved; the original draw history remains in the history tab.
++
++## Verification
++
++- `node --test tests/operations.test.mjs`: actual API handlers, isolated SQLite adapter, test-only injected SMS transport; migration preservation, Guest/Player/Admin, no PIN leakage, OTP replay/expiry/attempt limits, duplicate phone, account isolation, toggles and suspension.
++- `node node_modules/typescript/bin/tsc --noEmit`
++- `node node_modules/eslint/bin/eslint.js app components/member-panel.tsx components/admin-console.tsx lib db/schema.ts tests/operations.test.mjs`
++- `npm run build`
++
++The optional local HTTP contract test checks retired registration and protected records. Operational tests use isolated in-memory data; the built Worker smoke test uses disposable D1. No tests seed production accounts.
+diff --git a/README.md b/README.md
+index 7b7a61f..7961a7f 100644
+--- a/README.md
++++ b/README.md
+@@ -1,37 +1,32 @@
+ # re:world
+ 
+-手機優先的酒吧會員 App：註冊登入、會員資料、模擬門鎖、職業抽卡與冒險紀錄，以及四種屬性各三杯的擲骰子菜單。
++本儲存庫是 Reworld 後續開發的主要原始碼來源。請沿用 GitHub 分支與提交紀錄，優先透過 GitHub Actions 建置與測試，避免每次建立新的本機副本。
+ 
+-## 部署架構
++目前正式前台：https://reworld-member-app.vivi56782003.chatgpt.site/
+ 
+-GitHub 保存原始碼；Cloudflare Workers 執行完整網站與 API；Cloudflare D1 保存會員與抽卡紀錄。GitHub Pages 僅支援靜態內容，無法單獨執行此專案的登入與資料庫 API。
++目前正式後台：https://reworld-member-app.vivi56782003.chatgpt.site/admin
+ 
+-此專案尚未綁定 Cloudflare 帳號。請勿將 Token、密碼、本機資料庫、會員名單或 `.env` 檔提交到 GitHub。
++正式網站目前由 Sites 託管。GitHub 提交不會自動更新這個網址；目前也沒有獨立測試站。這份公開儲存庫不包含正式會員資料、管理員密碼或私人帳號建立 migration。
+ 
+-## 本機開發
++## 本階段功能
+ 
+-使用 Node.js 24，執行 `npm ci`、`npm run db:local`、`npm run dev`。
+-資料僅存於本機 `.wrangler`；新環境不會帶入舊站會員。
++Guest 可直接使用首頁、酒單、職業選擇、抽卡及符合營運條件時的 ACCESS。Player 保存 Player ID、選擇與抽卡紀錄。後台提供四個營運開關、維護訊息、會員搜尋及停權、統計、Door PIN 設定與操作紀錄。
+ 
+-## 連接 GitHub 自動部署
++手機 OTP 程式與安全限制已實作，但尚無 SMS 供應商，因此正式簡訊註冊尚未啟用。既有帳密登入保留。Door PIN 尚未設定時保持空值、Access 停用。Reward/Claim 已保留資料結構，實際獎勵規則待定。詳見 [OPERATIONS.md](OPERATIONS.md)。
+ 
+-1. 建立並登入 Cloudflare 帳號，建立 D1 資料庫 `reworld-members`。
+-2. 在 GitHub 專案建立 `production` environment，將 Cloudflare API Token 與帳號 ID 填入 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。Token 僅授予目標帳號必要的 Workers 部署與 D1 權限。
+-3. 在 repository Variables 填入 `REWORLD_D1_DATABASE_ID`，確認後將 `REWORLD_DEPLOY_ENABLED` 設為 `true`。
+-4. 執行 Actions → Deploy reworld。流程會建置、套用資料表遷移，再發布到 Workers。
+-5. 以 Cloudflare 實際回傳的 workers.dev 網址測試；設定完成前沒有可用的新網址。
++## 驗證
+ 
+-也可在本機完成 `wrangler login` 後，設定 `REWORLD_D1_DATABASE_ID` 並執行 `npm run deploy`。
+-不得覆写已套用的 drizzle migration；新增 schema 變更時使用 `npm run db:generate`。
++使用 Node.js 24：`npm ci`、`npm run typecheck`、`npm run lint`、`npm test`。測試使用隔離資料庫與測試 SMS，不會操作正式會員。GitHub Actions 在 push、PR 或手動執行時完成同樣檢查。
+ 
+-## 管理員
++需要本機預覽才執行 `npm run db:local`、`npm run dev`。不需預覽時可不安裝 node_modules；請勿刪除未備份的 `.wrangler` 本機資料庫。
+ 
+-新會員一律為一般會員；店家應先在新站註冊，再由維護者確認指定帳號後設定 admin 權限。這份原始碼不包含既有 viviadmin 帳號、密碼或登入憑證。
++## 選用 Cloudflare 自動部署
+ 
+-## 驗證與限制
++部署流程預設停用，且與現有 Sites 正式站不同。設定前不會產生新網址或搬移會員資料。
+ 
+-`npm run typecheck`、`npm run build`。會員 API 整合測試需先啟動本機預覽，再執行 `RUN_MEMBER_API_TESTS=1 node --test tests/member-api.test.mjs`；測試結束後執行產生的本機測試清理 SQL。
++1. 準備 Cloudflare Workers 帳號與 D1 資料庫。
++2. GitHub production environment 設定 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
++3. Repository Variables 設定真實 `REWORLD_D1_DATABASE_ID`，確認目標後設 `REWORLD_DEPLOY_ENABLED=true`。
++4. 手動執行 Deploy reworld，或 main 通過檢查後自動部署。
+ 
+-門鎖為模擬；菜單酒名與價格待確認。新 Cloudflare 環境尚須檢查會員註冊、登入、抽卡與資料庫持久化，並確認帳號方案的執行時間限制能容納密碼雜湊。尚未包含 Email 驗證或密碼找回服務。
+-
+-部署參考：https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/
++新 D1 是空環境，不會自動擁有現有 viviadmin 帳號。正式資料搬移與網域切換必須另外安排。SMS 與 OTP secret 只在執行環境設定，禁止提交到 GitHub。
+diff --git a/app/admin/page.tsx b/app/admin/page.tsx
+new file mode 100644
+index 0000000..81c7040
+--- /dev/null
++++ b/app/admin/page.tsx
+@@ -0,0 +1,10 @@
++import Link from 'next/link';
++import { headers } from 'next/headers';
++import { requireAdmin } from '@/lib/operations';
++import { AdminConsole } from '@/components/admin-console';
++export const dynamic = 'force-dynamic';
++export default async function AdminPage() {
++  try { await requireAdmin(new Request('https://reworld.internal/admin', { headers: await headers() })); }
++  catch { return <main className="admin-shell"><h1>ACCESS DENIED</h1><p>請使用有效的管理員帳號登入。</p><Link href="/">返回 REWORLD</Link></main>; }
++  return <AdminConsole />;
++}
+diff --git a/app/api/access/route.ts b/app/api/access/route.ts
+new file mode 100644
+index 0000000..2843afc
+--- /dev/null
++++ b/app/api/access/route.ts
+@@ -0,0 +1,22 @@
++import { apiError, currentMember, database, json, rateLimit, readBody } from '@/lib/member-auth';
++import { guestSession } from '@/lib/operations';
++export async function POST(request: Request) {
++  try {
++    await readBody(request);
++    const guest = await guestSession(request);
++    await rateLimit(request, guest.id, 'door-access');
++    const member = await currentMember(request);
++    // Read PIN only here. The conditional INSERT and following SELECT share a D1 transaction.
++    const db = database();
++    const id = crypto.randomUUID();
++    const results = await db.batch<{ store_online: number; maintenance_message: string; pin: string | null; seconds: number }>([
++      db.prepare("INSERT INTO door_access_logs(id, user_id, session_id, result) SELECT ?, ?, ?, 'granted' FROM system_settings WHERE id = 1 AND store_online = 1 AND door_access_enabled = 1 AND door_pin IS NOT NULL AND door_pin <> ''").bind(id, member?.id ?? null, guest.id),
++      db.prepare("SELECT store_online, maintenance_message, CASE WHEN store_online = 1 AND door_access_enabled = 1 THEN door_pin ELSE NULL END AS pin, door_pin_display_seconds AS seconds FROM system_settings WHERE id = 1"),
++    ]);
++    const state = results[1].results[0];
++    if (!state) return json({ error: 'ACCESS UNAVAILABLE' }, 503);
++    if (!state.store_online) return json({ error: 'SYSTEM OFFLINE', message: state.maintenance_message || 'REWORLD IS CURRENTLY OFFLINE' }, 403);
++    if (!state.pin) return json({ error: 'ACCESS UNAVAILABLE', message: state.maintenance_message }, 403);
++    return json({ status: 'ACCESS GRANTED', pin: state.pin, seconds: state.seconds }, 200, { 'Set-Cookie': guest.cookie });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/admin/dashboard/route.ts b/app/api/admin/dashboard/route.ts
+new file mode 100644
+index 0000000..7bf73cd
+--- /dev/null
++++ b/app/api/admin/dashboard/route.ts
+@@ -0,0 +1,13 @@
++import { apiError, database, json } from '@/lib/member-auth';
++import { requireAdmin } from '@/lib/operations';
++export async function GET(request: Request) {
++  try {
++    await requireAdmin(request);
++    const stats = await database().prepare(`SELECT
++      (SELECT count(*) FROM members) AS membersTotal,
++      (SELECT count(*) FROM members WHERE date(created_at, '+8 hours') = date('now', '+8 hours')) AS membersToday,
++      (SELECT count(*) FROM door_access_logs WHERE date(accessed_at, '+8 hours') = date('now', '+8 hours') AND result = 'granted') AS accessToday,
++      ((SELECT count(*) FROM reward_draws WHERE date(created_at, '+8 hours') = date('now', '+8 hours')) + (SELECT count(*) FROM guest_draws WHERE date(created_at, '+8 hours') = date('now', '+8 hours'))) AS drawsToday`).first();
++    return json({ stats });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/admin/logs/route.ts b/app/api/admin/logs/route.ts
+new file mode 100644
+index 0000000..303184d
+--- /dev/null
++++ b/app/api/admin/logs/route.ts
+@@ -0,0 +1,13 @@
++import { apiError, database, json } from '@/lib/member-auth';
++import { requireAdmin } from '@/lib/operations';
++export async function GET(request: Request) {
++  try {
++    await requireAdmin(request);
++    const params = new URL(request.url).searchParams;
++    const page = Math.max(0, Math.min(10000, Number(params.get('page')) || 0));
++    const access = params.get('type') === 'access';
++    const query = access ? 'SELECT id, user_id, session_id, accessed_at, result FROM door_access_logs ORDER BY accessed_at DESC, id DESC' : 'SELECT id, admin_id, action, created_at FROM admin_logs ORDER BY created_at DESC, id DESC';
++    const { results } = await database().prepare(query + ' LIMIT 51 OFFSET ?').bind(Math.floor(page) * 50).all();
++    return json({ logs: results.slice(0, 50), hasMore: results.length > 50 });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/admin/member/route.ts b/app/api/admin/member/route.ts
+new file mode 100644
+index 0000000..8f958cf
+--- /dev/null
++++ b/app/api/admin/member/route.ts
+@@ -0,0 +1,32 @@
++import { ApiError, apiError, database, json, memberColumns, readBody } from '@/lib/member-auth';
++import { audit, requireAdmin } from '@/lib/operations';
++export async function GET(request: Request) {
++  try {
++    await requireAdmin(request);
++    const id = new URL(request.url).searchParams.get('id');
++    const db = database();
++    const member = await db.prepare(`SELECT ${memberColumns} FROM members m WHERE id = ?`).bind(id).first();
++    if (!member) throw new ApiError(404, 'PLAYER NOT FOUND');
++    const history = await db.prepare('SELECT id, type, value, created_at FROM player_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
++    const draws = await db.prepare('SELECT id, role, reward, used, created_at FROM reward_draws WHERE member_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
++    const claims = await db.prepare('SELECT id, reward_key, status, created_at, claimed_at FROM reward_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
++    return json({ member, history: history.results, draws: draws.results, claims: claims.results });
++  } catch (error) { return apiError(error); }
++}
++export async function PATCH(request: Request) {
++  try {
++    const body = await readBody(request);
++    const admin = await requireAdmin(request);
++    if (typeof body.id !== 'string' || !['active', 'suspended'].includes(String(body.status))) throw new ApiError(400, '狀態不正確。');
++    const db = database();
++    const target = await db.prepare('SELECT access_role FROM members WHERE id = ?').bind(body.id).first<{ access_role: string }>();
++    if (!target) throw new ApiError(404, 'PLAYER NOT FOUND');
++    if (target.access_role === 'admin') throw new ApiError(403, '管理員帳號請由維護者管理。');
++    await db.batch([
++      db.prepare('UPDATE members SET status = ? WHERE id = ?').bind(body.status, body.id),
++      db.prepare('DELETE FROM member_sessions WHERE member_id = ?').bind(body.id),
++      audit(admin.id, `Player ${body.id} ${body.status === 'suspended' ? 'SUSPEND' : 'UNSUSPEND'}`),
++    ]);
++    return json({ ok: true });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/admin/members/route.ts b/app/api/admin/members/route.ts
+index f865df1..1f8b411 100644
+--- a/app/api/admin/members/route.ts
++++ b/app/api/admin/members/route.ts
+@@ -5,7 +5,9 @@ export async function GET(request: Request) {
+     if (member.accessRole !== "admin") throw new ApiError(403, "只有店家管理員可以查看會員名單。");
+     const rawPage = Number(new URL(request.url).searchParams.get("page") ?? 0);
+     const page = Number.isInteger(rawPage) && rawPage >= 0 ? Math.min(rawPage, 10000) : 0;
+-    const { results } = await database().prepare(`SELECT ${memberColumns}, (SELECT count(*) FROM reward_draws r WHERE r.member_id = m.id) AS drawCount FROM members m ORDER BY m.created_at DESC, m.id LIMIT 31 OFFSET ?`).bind(page * 30).all();
++    const q = (new URL(request.url).searchParams.get('q') ?? '').trim().slice(0, 64);
++    const normalized = /^09\d{8}$/.test(q) ? '+886' + q.slice(1) : q;
++    const { results } = await database().prepare(`SELECT ${memberColumns}, (SELECT count(*) FROM reward_draws r WHERE r.member_id = m.id) AS drawCount FROM members m WHERE instr(m.phone, ?) > 0 OR instr(m.phone, ?) > 0 OR instr(lower(m.player_id), lower(?)) > 0 ORDER BY m.created_at DESC, m.id LIMIT 31 OFFSET ?`).bind(q, normalized, q, page * 30).all();
+     return json({ members: results.slice(0, 30), hasMore: results.length > 30 });
+   } catch (error) { return apiError(error); }
+ }
+diff --git a/app/api/admin/settings/route.ts b/app/api/admin/settings/route.ts
+new file mode 100644
+index 0000000..7a14d3e
+--- /dev/null
++++ b/app/api/admin/settings/route.ts
+@@ -0,0 +1,44 @@
++import { ApiError, apiError, database, json, readBody } from '@/lib/member-auth';
++import { audit, requireAdmin, settings } from '@/lib/operations';
++export async function GET(request: Request) {
++  try {
++    await requireAdmin(request);
++    const pin = await database().prepare("SELECT CASE WHEN door_pin IS NULL OR door_pin = '' THEN 0 ELSE 1 END AS configured FROM system_settings WHERE id = 1").first();
++    return json({ settings: await settings(), pinConfigured: Boolean(pin?.configured) });
++  } catch (error) { return apiError(error); }
++}
++export async function PATCH(request: Request) {
++  try {
++    const body = await readBody(request);
++    const admin = await requireAdmin(request);
++    const toggles = ['store_online', 'door_access_enabled', 'card_draw_enabled', 'registration_enabled'];
++    const names: Record<string, string> = { store_online: 'Store', door_access_enabled: 'Door Access', card_draw_enabled: 'Card Draw', registration_enabled: 'Registration' };
++    const keys = Object.keys(body);
++    if (!keys.length || keys.some(key => ![...toggles, 'maintenance_message', 'door_pin', 'door_pin_display_seconds'].includes(key))) throw new ApiError(400, '設定欄位不正確。');
++    const db = database();
++    const statements: D1PreparedStatement[] = [];
++    for (const key of keys) {
++      let value = body[key];
++      let action: string;
++      if (toggles.includes(key)) {
++        if (typeof value !== 'boolean') throw new ApiError(400, '開關必須為 ON / OFF。');
++        action = `${names[key]} ${key === 'store_online' ? (value ? 'ONLINE' : 'OFFLINE') : (value ? 'ON' : 'OFF')}`;
++        value = value ? 1 : 0;
++      } else if (key === 'maintenance_message') {
++        if (typeof value !== 'string' || value.length > 500) throw new ApiError(400, '訊息最多 500 字。');
++        action = 'Maintenance Message changed';
++      } else if (key === 'door_pin') {
++        if (value !== null && (typeof value !== 'string' || !/^\d{4,12}$/.test(value))) throw new ApiError(400, 'Door PIN 須為 4–12 位數字，或清除設定。');
++        action = 'Door PIN changed';
++      } else {
++        if (typeof value !== 'number' || !Number.isInteger(value) || value < 5 || value > 60) throw new ApiError(400, '顯示時間須介於 5–60 秒。');
++        action = 'Door PIN display duration changed';
++      }
++      // key is strictly allowlisted; PIN never appears in the audit action.
++      statements.push(db.prepare(`UPDATE system_settings SET ${key} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`).bind(value));
++      statements.push(audit(admin.id, action));
++    }
++    await db.batch(statements);
++    return json({ ok: true });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/draws/route.ts b/app/api/draws/route.ts
+index 9666b9e..caac16c 100644
+--- a/app/api/draws/route.ts
++++ b/app/api/draws/route.ts
+@@ -1,4 +1,5 @@
+ import { ApiError, apiError, database, currentMember, json, readBody, requireMember } from "@/lib/member-auth";
++import { guestSession, settings } from '@/lib/operations';
+ 
+ const roles = ["高級牛馬", "摸魚大師", "畫餅充飢", "人生勝利組"] as const;
+ type Role = (typeof roles)[number];
+@@ -50,11 +51,18 @@ export async function GET(request: Request) {
+ export async function POST(request: Request) {
+   try {
+     const payload = await readBody(request);
++    const system = await settings();
++    if (!system.card_draw_enabled) throw new ApiError(403, system.maintenance_message || 'CARD DRAW OFFLINE');
+     const member = await currentMember(request);
+     const role = payload.role as Role;
+     if (!roles.includes(role)) throw new ApiError(400, "請選擇有效角色。");
+     const reward = chooseReward(role);
+-    if (!member) return json({ record: { id: crypto.randomUUID(), role, reward, createdAt: new Date().toISOString(), saved: false } }, 201);
++    if (!member) {
++      const guest = await guestSession(request);
++      const id = crypto.randomUUID();
++      await database().prepare('INSERT INTO guest_draws(id, session_id, role, reward) VALUES (?, ?, ?, ?)').bind(id, guest.id, role, reward).run();
++      return json({ record: { id, role, reward, createdAt: new Date().toISOString(), saved: false } }, 201, { 'Set-Cookie': guest.cookie });
++    }
+     const record = await database().prepare("INSERT INTO reward_draws (member_id, member_name, role, reward) VALUES (?, ?, ?, ?) RETURNING id, role, reward, created_at AS createdAt").bind(member.id, member.displayName, role, reward).first();
+     return json({ record: { ...record, saved: true } }, 201);
+   } catch (error) { return apiError(error); }
+diff --git a/app/api/member/otp/send/route.ts b/app/api/member/otp/send/route.ts
+new file mode 100644
+index 0000000..9ce5d61
+--- /dev/null
++++ b/app/api/member/otp/send/route.ts
+@@ -0,0 +1,35 @@
++import { ApiError, apiError, database, json, readBody } from '@/lib/member-auth';
++import { normalizePhone, otpHash, otpSendLimit, smsConfiguration } from '@/lib/otp';
++import { settings } from '@/lib/operations';
++export async function POST(request: Request) {
++  try {
++    const body = await readBody(request);
++    const phone = normalizePhone(body.phone);
++    const config = smsConfiguration();
++    const system = await settings();
++    const existing = await database().prepare('SELECT id FROM members WHERE phone = ? AND phone_verified = 1').bind(phone).first();
++    if (!system.registration_enabled && !existing) throw new ApiError(403, system.maintenance_message || 'REGISTRATION OFFLINE');
++    await otpSendLimit(request, phone);
++    const id = crypto.randomUUID();
++    // Rejection sampling avoids modulo bias.
++    let number: number;
++    do { number = crypto.getRandomValues(new Uint32Array(1))[0]; } while (number >= 4294000000);
++    const code = String(number % 1000000).padStart(6, '0');
++    const db = database();
++    await db.batch([
++      db.prepare('UPDATE otp_challenges SET consumed = 1 WHERE phone = ?').bind(phone),
++      db.prepare('INSERT INTO otp_challenges(id, phone, code_hash, expires_at) VALUES (?, ?, ?, ?)').bind(id, phone, await otpHash(id, phone, code, config.secret), Date.now() + 300000),
++    ]);
++    let delivered = false;
++    try {
++      const response = await config.sms.fetch('https://sms.internal/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: phone, message: `REWORLD 驗證碼：${code}。5 分鐘內有效，請勿提供給他人。`, idempotencyKey: id }), signal: AbortSignal.timeout(10000) });
++      delivered = response.ok;
++    } catch { /* Never log provider responses or OTP. */ }
++    if (!delivered) {
++      await db.prepare('UPDATE otp_challenges SET consumed = 1 WHERE id = ?').bind(id).run();
++      throw new ApiError(503, '簡訊暫時無法發送，請稍後再試。');
++    }
++    await db.prepare('UPDATE otp_challenges SET sent = 1 WHERE id = ?').bind(id).run();
++    return json({ challengeId: id, expiresIn: 300, resendAfter: 60 });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/member/otp/verify/route.ts b/app/api/member/otp/verify/route.ts
+new file mode 100644
+index 0000000..b96bc78
+--- /dev/null
++++ b/app/api/member/otp/verify/route.ts
+@@ -0,0 +1,23 @@
++import { ApiError, apiError, createSession, database, json, rateLimit, readBody } from '@/lib/member-auth';
++import { normalizePhone, otpHash, smsConfiguration } from '@/lib/otp';
++export async function POST(request: Request) {
++  try {
++    const body = await readBody(request);
++    const phone = normalizePhone(body.phone);
++    if (typeof body.challengeId !== 'string' || body.challengeId.length > 64 || typeof body.code !== 'string' || !/^\d{6}$/.test(body.code)) throw new ApiError(400, '請輸入六位數驗證碼。');
++    const config = smsConfiguration();
++    await rateLimit(request, phone, 'otp-verify');
++    const hash = await otpHash(body.challengeId, phone, body.code, config.secret);
++    const db = database();
++    // One atomic update increments attempts and consumes a correct code exactly once.
++    const challenge = await db.prepare('UPDATE otp_challenges SET attempts = attempts + 1, consumed = CASE WHEN code_hash = ? THEN 1 ELSE 0 END WHERE id = ? AND phone = ? AND expires_at > ? AND attempts < 5 AND consumed = 0 AND sent = 1 RETURNING consumed').bind(hash, body.challengeId, phone, Date.now()).first<{ consumed: number }>();
++    if (!challenge?.consumed) throw new ApiError(400, '驗證碼錯誤、已失效或超過嘗試次數，請重新取得。');
++    const id = crypto.randomUUID();
++    const playerId = 'RW-' + id.replaceAll('-', '').toUpperCase();
++    // Existing unverified contact phone numbers never establish account ownership.
++    await db.prepare("INSERT INTO members(id, username, display_name, phone, password_hash, player_id, phone_verified) SELECT ?, ?, 'PLAYER', ?, '', ?, 1 FROM system_settings WHERE id = 1 AND registration_enabled = 1 ON CONFLICT DO NOTHING").bind(id, 'phone_' + id, phone, playerId).run();
++    const member = await db.prepare('SELECT id FROM members WHERE phone = ? AND phone_verified = 1').bind(phone).first<{ id: string }>();
++    if (!member) throw new ApiError(403, 'REGISTRATION OFFLINE');
++    return json({ ok: true, status: 'IDENTITY VERIFIED' }, 200, { 'Set-Cookie': await createSession(request, member.id) });
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/member/register/route.ts b/app/api/member/register/route.ts
+index 04e10e8..caaeafc 100644
+--- a/app/api/member/register/route.ts
++++ b/app/api/member/register/route.ts
+@@ -1,16 +1,5 @@
+-import { account, apiError, ApiError, createSession, database, hashPassword, json, password, profile, rateLimit, readBody } from "@/lib/member-auth";
+-
++import { apiError, json, readBody } from '@/lib/member-auth';
+ export async function POST(request: Request) {
+-  try {
+-    const body = await readBody(request);
+-    const username = account(body.username);
+-    const secret = password(body.password);
+-    const details = profile(body);
+-    await rateLimit(request, username, "register");
+-    const id = crypto.randomUUID();
+-    const hash = await hashPassword(secret);
+-    const inserted = await database().prepare("INSERT INTO members (id, username, display_name, phone, email, password_hash) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username) DO NOTHING RETURNING id").bind(id, username, details.displayName, details.phone, details.email, hash).first();
+-    if (!inserted) throw new ApiError(409, "此帳號已被使用，請更換帳號或登入。");
+-    return json({ ok: true }, 201, { "Set-Cookie": await createSession(request, id) });
+-  } catch (error) { return apiError(error); }
++  try { await readBody(request); return json({ error: '請使用手機驗證建立 PLAYER ID。' }, 410); }
++  catch (error) { return apiError(error); }
+ }
+diff --git a/app/api/member/route.ts b/app/api/member/route.ts
+index 6e079fc..c10e132 100644
+--- a/app/api/member/route.ts
++++ b/app/api/member/route.ts
+@@ -8,7 +8,8 @@ export async function PATCH(request: Request) {
+     const body = await readBody(request);
+     const member = await requireMember(request);
+     const details = profile(body);
+-    await database().prepare("UPDATE members SET display_name = ?, phone = ?, email = ? WHERE id = ?").bind(details.displayName, details.phone, details.email, member.id).run();
++    details.phone = member.phone;
++    await database().prepare("UPDATE members SET display_name = ?, email = ? WHERE id = ?").bind(details.displayName, details.email, member.id).run();
+     return json({ member: { ...member, ...details } });
+   } catch (error) { return apiError(error); }
+ }
+diff --git a/app/api/player/history/route.ts b/app/api/player/history/route.ts
+new file mode 100644
+index 0000000..2ebab0d
+--- /dev/null
++++ b/app/api/player/history/route.ts
+@@ -0,0 +1,20 @@
++import { ApiError, apiError, database, json, rateLimit, readBody, requireMember } from '@/lib/member-auth';
++import { playerRoles } from '@/lib/operations';
++export async function GET(request: Request) {
++  try {
++    const member = await requireMember(request);
++    const { results } = await database().prepare('SELECT id, type, value, created_at FROM player_history WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(member.id).all();
++    const { results: claims } = await database().prepare('SELECT id, reward_key, status, created_at, claimed_at FROM reward_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(member.id).all();
++    return json({ history: results, claims });
++  } catch (error) { return apiError(error); }
++}
++export async function POST(request: Request) {
++  try {
++    const body = await readBody(request);
++    const member = await requireMember(request);
++    if (body.type !== 'class' || typeof body.value !== 'string' || !playerRoles.includes(body.value)) throw new ApiError(400, '請選擇有效角色。');
++    await rateLimit(request, member.id, 'player-history');
++    await database().prepare('INSERT INTO player_history(id, user_id, type, value) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), member.id, body.type, body.value).run();
++    return json({ ok: true }, 201);
++  } catch (error) { return apiError(error); }
++}
+diff --git a/app/api/system/route.ts b/app/api/system/route.ts
+new file mode 100644
+index 0000000..37c25d3
+--- /dev/null
++++ b/app/api/system/route.ts
+@@ -0,0 +1,5 @@
++import { apiError, json } from '@/lib/member-auth';
++import { settings } from '@/lib/operations';
++export async function GET() {
++  try { return json({ settings: await settings() }); } catch (error) { return apiError(error); }
++}
+diff --git a/app/globals.css b/app/globals.css
+index 202e697..bc0b3e0 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -2,6 +2,14 @@
+ @import "tw-animate-css";
+ @import "../vendor/shadcn-tailwind-4.13.0.css";
+ 
++/* Scroll primitives used by the component catalog. */
++@utility scrollbar-thin { scrollbar-width: thin; }
++@utility scrollbar-none {
++  scrollbar-width: none;
++  &::-webkit-scrollbar { display: none; }
++}
++@utility scrollbar-gutter-stable { scrollbar-gutter: stable; }
++
+ :root {
+   --background: #050812;
+   --foreground: #f4f8ff;
+@@ -566,3 +574,35 @@ button:focus-visible { outline: 2px solid #7fd6ff; outline-offset: 3px; }
+ .random-role-action { width: 100%; min-height: 52px; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #8d71ee; border-radius: 5px 15px 5px 15px; color: #e6dcff; background: linear-gradient(110deg, #241b40, #11172c); font-weight: 750; cursor: pointer; }
+ .random-role-action:disabled { opacity: .65; cursor: wait; }
+ .guest-draw-note { color: #9aafc8; font-size: .875rem; line-height: 1.6; text-align: center; margin: 12px 0 0; }
++
++/* Operations extend the existing terminal palette. */
++.system-notice { margin: 12px 18px; padding: 14px; border: 1px solid #356073; background: #10212b; color: #dceefa; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
++.system-notice p { margin: 6px 0 0; }
++.door-code { display: grid; justify-items: center; gap: 10px; margin: 20px 0; padding: 24px 12px; border: 1px solid #16e0bc; background: #0e2528; }
++.door-code strong { font-size: clamp(24px, 7vw, 38px); letter-spacing: .12em; color: #7cffe5; }
++.door-code span, .door-code small, .door-code button { font-size: 14px; }
++.door-code button { padding: 8px 18px; border: 1px solid #356073; }
++.member-card strong { overflow-wrap: anywhere; }
++.admin-shell { max-width: 1080px; margin: 0 auto; min-height: 100vh; padding: 32px 22px; background: #09131e; color: #e5f1fa; font-size: 16px; }
++.admin-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
++.admin-header h1 { font-size: clamp(26px, 6vw, 40px); margin: 8px 0; }
++.admin-header a { color: #16e0bc; font-size: 14px; }
++.admin-stats, .admin-toggles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
++.admin-stats article, .admin-toggles article, .admin-detail { padding: 20px; border: 1px solid #294050; background: #101e2c; }
++.admin-stats span { color: #a4bacb; font-size: 14px; }
++.admin-stats strong { display: block; font-size: 30px; margin-top: 10px; color: #16e0bc; }
++.admin-toggles article { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
++.admin-toggles label { font-size: 14px; }
++.admin-toggles strong { display: block; margin-top: 10px; }
++.admin-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; border-top: 1px solid #294050; padding-top: 25px; }
++.admin-shell h2 { margin: 20px 0 12px; font-size: 19px; }
++.admin-shell h3 { margin: 24px 0 12px; font-size: 16px; color: #16e0bc; }
++.admin-shell input, .admin-shell textarea { background: #0b1723; font-size: 16px; }
++.admin-shell [data-slot="tabs-list"] { flex-wrap: wrap; height: auto; }
++.admin-search { display: flex; gap: 10px; margin: 24px 0; }
++.admin-member, .admin-logs article { display: grid; gap: 8px; width: 100%; text-align: left; border-bottom: 1px solid #294050; padding: 18px 0; overflow-wrap: anywhere; }
++.admin-member:hover { color: #16e0bc; }
++.admin-detail { margin-top: 24px; overflow-wrap: anywhere; }
++.admin-logs small, .admin-member small, .admin-logs time { font-size: 14px; color: #a4bacb; }
++@media (max-width: 700px) { .admin-stats, .admin-toggles { grid-template-columns: 1fr 1fr; } .admin-settings { grid-template-columns: 1fr; } .admin-header { align-items: flex-start; } }
++@media (max-width: 380px) { .admin-toggles { grid-template-columns: 1fr; } }
+diff --git a/app/page.tsx b/app/page.tsx
+index 1f7e3a4..49ac791 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -57,7 +57,28 @@ export default function HomePage() {
+   const [tab, setTab] = useState<Tab>("home");
+   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+   const [unlocking, setUnlocking] = useState(false);
+-  const [unlocked, setUnlocked] = useState(false);
++  const [doorCode, setDoorCode] = useState<string | null>(null);
++  const unlocked = Boolean(doorCode);
++  const [system, setSystem] = useState<import('@/lib/operations').PublicSettings | null>(null);
++  const [accessMessage, setAccessMessage] = useState('');
++  const accessRequest = useRef<AbortController | null>(null);
++  const doorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
++  useEffect(() => {
++    const controller = new AbortController();
++    const refresh = () => fetch('/api/system', { signal: controller.signal, cache: 'no-store' }).then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<{ settings: import('@/lib/operations').PublicSettings }>; }).then(data => { setSystem(data.settings); if (!data.settings.store_online || !data.settings.door_access_enabled) setDoorCode(null); }).catch(() => { if (!controller.signal.aborted) { setSystem(null); setDoorCode(null); } });
++    void refresh(); const timer = setInterval(refresh, 10000);
++    return () => { controller.abort(); clearInterval(timer); };
++  }, []);
++  useEffect(() => {
++    const clear = () => { accessRequest.current?.abort(); setDoorCode(null); if (doorTimer.current) clearTimeout(doorTimer.current); };
++    document.addEventListener('visibilitychange', clear);
++    return () => { document.removeEventListener('visibilitychange', clear); clear(); };
++  }, [tab]);
++  async function saveRole(value: Role) {
++    if (!member) return;
++    try { const response = await fetch('/api/player/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'class', value }) }); if (!response.ok) throw new Error(); }
++    catch { toast.error('角色已選擇，但紀錄暫時無法保存。'); }
++  }
+   const [drawing, setDrawing] = useState(false);
+   const [result, setResult] = useState<DrawRecord | null>(null);
+   const [records, setRecords] = useState<DrawRecord[]>([]);
+@@ -79,7 +100,7 @@ export default function HomePage() {
+     const tick = () => {
+       setLitRole(roles[step % roles.length].name);
+       if (step === lastStep) {
+-        setSelectedRole(roles[target].name);
++        setSelectedRole(roles[target].name); void saveRole(roles[target].name);
+         setLitRole(null); setRandomizing(false); actionBusy.current = false;
+         toast.success(`你的角色是：${roles[target].name}`);
+         return;
+@@ -142,12 +163,17 @@ export default function HomePage() {
+ 
+   async function handleUnlock() {
+     if (unlocking || unlocked) return;
+-    setUnlocking(true);
+-    await new Promise((resolve) => setTimeout(resolve, 1350));
+-    setUnlocking(false);
+-    setUnlocked(true);
+-    toast.success("門鎖已解開，歡迎進入 re:world");
+-    window.setTimeout(() => setUnlocked(false), 5000);
++    const controller = new AbortController(); accessRequest.current = controller;
++    setUnlocking(true); setAccessMessage('');
++    try {
++      const response = await fetch('/api/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: controller.signal });
++      const data = await response.json() as { error?: string; message?: string; pin: string; seconds: number };
++      if (!response.ok) throw new Error([data.error, data.message].filter(Boolean).join(' · '));
++      if (controller.signal.aborted || document.hidden) return;
++      setDoorCode(data.pin);
++      doorTimer.current = setTimeout(() => setDoorCode(null), data.seconds * 1000);
++    } catch (error) { if (!controller.signal.aborted) setAccessMessage((error as Error).message); }
++    finally { setUnlocking(false); }
+   }
+ 
+   async function drawReward() {
+@@ -190,10 +216,11 @@ export default function HomePage() {
+           <div className="brand" aria-label="re world">
+             <span>re:</span>world
+           </div>
+-          <div className="system-status"><i /> ONLINE</div>
++          <div className="system-status">{system ? (system.store_online ? "SYSTEM ONLINE" : "SYSTEM OFFLINE") : "CONNECTING"}</div>
+         </header>
+ 
+         <div className="content">
++          {system && (!system.store_online || system.maintenance_message) && <div className="system-notice" role="status">{!system.store_online && <strong>SYSTEM OFFLINE<br />REWORLD IS CURRENTLY OFFLINE</strong>}<p>{system.maintenance_message}</p></div>}
+           {tab === "home" && (
+             <div className="screen home-screen">
+               <div className="eyebrow">ACCESS TERMINAL · 01</div>
+@@ -214,13 +241,14 @@ export default function HomePage() {
+                 <span className="unlock-icon">
+                   {unlocked ? <Unlock size={38} /> : <LogIn size={38} />}
+                 </span>
+-                <strong>{unlocking ? "驗證中" : unlocked ? "已解鎖" : "登入 re:world"}</strong>
++                <strong>{unlocking ? "CHECKING" : unlocked ? "ACCESS GRANTED" : "ACCESS"}</strong>
+                 <small>{unlocking ? "SCANNING ACCESS" : unlocked ? "ACCESS GRANTED" : "TAP TO ACCESS"}</small>
+               </button>
+ 
++              {doorCode && <div className="door-code" role="status"><span>DOOR CODE</span><strong>{doorCode}</strong><small>代碼將自動隱藏</small><button onClick={() => setDoorCode(null)}>HIDE CODE</button></div>}
++              {accessMessage && <p className="system-notice" role="alert">{accessMessage}</p>}
+               <div className="connection-strip">
+-                <div><span className="signal-dot" />門鎖模擬模式</div>
+-                <span>尚未串接設備</span>
++                <div>{member ? 'PLAYER' : 'GUEST'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
+               </div>
+ 
+               <button className="mission-card" onClick={() => setTab("roles")}>
+@@ -249,7 +277,7 @@ export default function HomePage() {
+                     aria-pressed={selectedRole === name}
+                     aria-label={name}
+                     style={{ "--role-color": color } as React.CSSProperties}
+-                    onClick={() => { setSelectedRole(name); setResult(null); }}
++                    onClick={() => { setSelectedRole(name); void saveRole(name); setResult(null); }}
+                   >
+                     <span className="role-code">{code}</span>
+                     <span className="role-emblem"><Icon size={34} strokeWidth={1.7} /></span>
+@@ -260,8 +288,9 @@ export default function HomePage() {
+                 ))}
+               </div>
+ 
++              {system && !system.card_draw_enabled && <p className="system-notice" role="status">CARD DRAW OFFLINE{system.maintenance_message && ` · ${system.maintenance_message}`}</p>}
+               {!result ? (
+-                <button className="primary-action" disabled={drawing || randomizing || !selectedRole} onClick={drawReward}>
++                <button className="primary-action" disabled={drawing || randomizing || !selectedRole || !system?.card_draw_enabled} onClick={drawReward}>
+                   <Sparkles size={18} />
+                   {drawing ? "正在抽取獎勵…" : randomizing ? "正在選擇角色…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇角色"}
+                 </button>
+@@ -282,14 +311,14 @@ export default function HomePage() {
+           )}
+ 
+           {tab === "menu" && <MenuBoard />}
+-          {tab === "member" && <MemberPanel member={member} loading={memberLoading} error={memberError} onRefresh={refreshMember} />}
++          {tab === "member" && <MemberPanel registrationEnabled={Boolean(system?.registration_enabled)} member={member} loading={memberLoading} error={memberError} onRefresh={refreshMember} />}
+           {tab === "history" && (
+             <div className="screen history-screen">
+               <div className="eyebrow">PLAYER LOG · 03</div>
+               <h1>冒險紀錄</h1>
+               <p className="screen-copy">每一次選擇，都會成為你的角色資料。</p>
+ 
+-              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>登入／註冊</button></div> : <>
++              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>CREATE PLAYER ID</button></div> : <>
+               <div className="stats-row">
+                 <div><span>總抽取</span><strong>{totalDraws}</strong></div>
+                 <div><span>主要角色</span><strong>{favoriteRole ?? "—"}</strong></div>
+diff --git a/components/admin-console.tsx b/components/admin-console.tsx
+new file mode 100644
+index 0000000..c0c4f3e
+--- /dev/null
++++ b/components/admin-console.tsx
+@@ -0,0 +1,94 @@
++'use client';
++import Link from 'next/link';
++import { useCallback, useEffect, useState, type FormEvent } from 'react';
++import { Button } from '@/components/ui/button';
++import { Input } from '@/components/ui/input';
++import { Textarea } from '@/components/ui/textarea';
++import { Switch } from '@/components/ui/switch';
++import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
++import type { PublicSettings } from '@/lib/operations';
++import type { Member } from '@/lib/member-types';
++
++async function api<T = { ok: boolean }>(path: string, body?: Record<string, unknown>) {
++  const response = await fetch(path, { cache: 'no-store', ...(body ? { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
++  const data = await response.json() as T & { error?: string }; if (!response.ok) throw new Error(data.error || '操作失敗。'); return data;
++}
++type Detail = { member: Member; history: Array<{ id: string; value: string; created_at: string }>; draws: Array<{ id: number; role: string; reward: string; used: number; created_at: string }>; claims: Array<{ id: string; reward_key: string; status: string }> };
++type Log = { id: string; admin_id?: string; action?: string; created_at?: string; user_id?: string; session_id?: string; accessed_at?: string; result?: string };
++const toggles = [ ['store_online', 'STORE STATUS'], ['door_access_enabled', 'DOOR ACCESS'], ['card_draw_enabled', 'CARD DRAW'], ['registration_enabled', 'REGISTRATION'] ] as const;
++export function AdminConsole() {
++  const [settings, setSettings] = useState<PublicSettings | null>(null);
++  const [pinConfigured, setPinConfigured] = useState(false);
++  const [stats, setStats] = useState<Record<string, number>>({});
++  const [tab, setTab] = useState('settings');
++  const [message, setMessage] = useState('');
++  const [busy, setBusy] = useState(false);
++  const [members, setMembers] = useState<Member[]>([]);
++  const [query, setQuery] = useState('');
++  const [page, setPage] = useState(0);
++  const [more, setMore] = useState(false);
++  const [detail, setDetail] = useState<Detail | null>(null);
++  const [logs, setLogs] = useState<Log[]>([]);
++  const refresh = useCallback(async () => {
++    const [config, dashboard] = await Promise.all([api<{ settings: PublicSettings; pinConfigured: boolean }>('/api/admin/settings'), api<{ stats: Record<string, number> }>('/api/admin/dashboard')]);
++    setSettings(config.settings); setPinConfigured(config.pinConfigured); setStats(dashboard.stats);
++  }, []);
++  // Initial server synchronization; state changes follow awaited network responses.
++  // eslint-disable-next-line react-hooks/set-state-in-effect
++  useEffect(() => { void refresh().catch(e => setMessage(e.message)); }, [refresh]);
++  async function change(body: Record<string, unknown>) {
++    if (busy) return;
++    setBusy(true); setMessage('');
++    try { await api('/api/admin/settings', body); await refresh(); setMessage('MISSION COMPLETE · 設定已生效'); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  async function list(next = 0) {
++    setBusy(true); setMessage('');
++    try { const data = await api<{ members: Member[]; hasMore: boolean }>(`/api/admin/members?page=${next}&q=${encodeURIComponent(query)}`); setMembers(data.members); setMore(data.hasMore); setPage(next); setDetail(null); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  async function openMember(id: string) {
++    setBusy(true); setDetail(null); setMessage('');
++    try { setDetail(await api<Detail>('/api/admin/member?id=' + encodeURIComponent(id))); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  async function suspend() {
++    if (!detail || busy) return;
++    setBusy(true);
++    try { await api('/api/admin/member', { id: detail.member.id, status: detail.member.status === 'active' ? 'suspended' : 'active' }); setDetail(await api('/api/admin/member?id=' + encodeURIComponent(detail.member.id))); setMessage('Account status updated'); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  async function loadLogs(type: string, next = 0) {
++    setBusy(true); setMessage(''); setLogs([]);
++    try { const data = await api<{ logs: Log[]; hasMore: boolean }>(`/api/admin/logs?type=${type}&page=${next}`); setLogs(data.logs); setMore(data.hasMore); setPage(next); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  function select(value: string) { setTab(value); setPage(0); setMore(false); setMessage(''); if (value === 'members') void list(); else if (value !== 'settings') void loadLogs(value); }
++  function savePin(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault(); const form = event.currentTarget;
++    const pin = new FormData(form).get('pin'); form.reset(); void change({ door_pin: pin });
++  }
++  return <main className="admin-shell">
++    <header className="admin-header"><div><div className="eyebrow">REWORLD · CONTROL ROOM</div><h1>OPERATIONS</h1></div><Link href="/">BACK TO APP</Link></header>
++    <section className="admin-stats">{[['membersToday', '今日新會員'], ['membersTotal', '會員總數'], ['accessToday', '今日 Door Access'], ['drawsToday', '今日抽卡']].map(([key, label]) => <article key={key}><span>{label}</span><strong>{stats[key] ?? '—'}</strong></article>)}</section>
++    <p className="screen-copy">今日統計以台灣時間計算。</p>
++    <Tabs value={tab} onValueChange={select}><TabsList aria-label="營運管理">{[['settings', 'SYSTEM'], ['members', 'MEMBERS'], ['access', 'ACCESS LOG'], ['audit', 'AUDIT LOG']].map(([value, label]) => <TabsTrigger key={value} value={value} disabled={busy}>{label}</TabsTrigger>)}</TabsList></Tabs>
++    {message && <p className="system-notice" role="status">{message}</p>}
++    {!settings && <Button onClick={() => void refresh().catch(e => setMessage(e.message))}>讀取營運設定</Button>}
++    {tab === 'settings' && settings && <>
++      <section className="admin-toggles">{toggles.map(([key, label]) => <article key={key}><label htmlFor={key}>{label}<strong>{key === 'store_online' ? (settings[key] ? 'ONLINE' : 'OFFLINE') : (settings[key] ? 'ON' : 'OFF')}</strong></label><Switch id={key} checked={Boolean(settings[key])} disabled={busy} onCheckedChange={checked => void change({ [key]: checked })} /></article>)}</section>
++      <section className="admin-settings"><form className="member-form" onSubmit={e => { e.preventDefault(); void change({ maintenance_message: new FormData(e.currentTarget).get('message') }); }}><h2>MAINTENANCE MESSAGE</h2><Textarea key={settings.maintenance_message} name="message" defaultValue={settings.maintenance_message} maxLength={500} rows={4} aria-label="Maintenance Message" /><Button disabled={busy}>SAVE MESSAGE</Button></form>
++      <div><h2>DOOR ACCESS</h2><p className="screen-copy">Door PIN：{pinConfigured ? '•••••• · 已設定' : '尚未設定'}</p><form className="member-form" onSubmit={savePin}><label>新的 Door PIN<Input name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,12}" minLength={4} maxLength={12} autoComplete="new-password" placeholder="••••••" required /></label><Button disabled={busy}>UPDATE PIN</Button></form><Button variant="outline" disabled={busy || !pinConfigured} onClick={() => void change({ door_pin: null })}>CLEAR PIN</Button><form className="member-form" onSubmit={e => { e.preventDefault(); void change({ door_pin_display_seconds: Number(new FormData(e.currentTarget).get('seconds')) }); }}><label>DISPLAY DURATION · SEC<Input key={settings.door_pin_display_seconds} name="seconds" type="number" min={5} max={60} defaultValue={settings.door_pin_display_seconds} required /></label><Button disabled={busy}>SAVE DURATION</Button></form></div></section>
++    </>}
++    {tab === 'members' && <section><form className="admin-search" onSubmit={e => { e.preventDefault(); void list(); }}><Input value={query} onChange={e => setQuery(e.target.value)} placeholder="手機號碼 / Player ID" aria-label="搜尋會員" maxLength={64} /><Button disabled={busy}>SEARCH</Button></form>{members.map(member => <button className="admin-member" key={member.id} disabled={busy} onClick={() => void openMember(member.id)}><strong>{member.playerId}</strong><span>{member.phone || '未驗證手機'}</span><small>{member.status} · {member.createdAt}</small></button>)}{!busy && !members.length && <p>沒有符合的會員。</p>}
++      {detail && <article className="admin-detail"><h2>{detail.member.playerId}</h2><p>{detail.member.phone || '未填手機'} · {detail.member.phoneVerified ? 'VERIFIED' : 'UNVERIFIED'}</p><p>註冊：{detail.member.createdAt}</p><p>最後登入：{detail.member.lastLoginAt || '—'}</p><p>ACCOUNT STATUS：{detail.member.status}</p><Button disabled={busy || detail.member.accessRole === 'admin'} onClick={suspend}>{detail.member.status === 'active' ? 'SUSPEND' : 'UNSUSPEND'}</Button><h3>CLASS HISTORY · 最近 100 筆</h3>{detail.history.length ? detail.history.map(row => <p key={row.id}>{row.value} · {row.created_at}</p>) : <p>尚無紀錄</p>}<h3>DRAW HISTORY · 最近 100 筆</h3>{detail.draws.length ? detail.draws.map(row => <p key={row.id}>{row.role} · {row.reward} · {row.used ? 'CLAIMED' : 'UNCLAIMED'} · {row.created_at}</p>) : <p>尚無紀錄</p>}<h3>REWARD / CLAIM</h3>{detail.claims.length ? detail.claims.map(row => <p key={row.id}>{row.reward_key} · {row.status}</p>) : <p>尚無紀錄</p>}</article>}
++    </section>}
++    {(tab === 'access' || tab === 'audit') && <section className="admin-logs">{logs.map(log => <article key={log.id}><time>{log.created_at || log.accessed_at} UTC</time><strong>{log.action || log.result}</strong><small>{log.admin_id ? `Admin ${log.admin_id}` : log.user_id ? `Player ${log.user_id}` : `Guest ${log.session_id?.slice(0, 12)}`}</small></article>)}{!busy && !logs.length && <p>尚無紀錄</p>}<Button disabled={busy} onClick={() => void loadLogs(tab, page)}>REFRESH</Button></section>}
++    {tab !== 'settings' && <div className="directory-pagination"><Button disabled={busy || page === 0} onClick={() => tab === 'members' ? void list(page - 1) : void loadLogs(tab, page - 1)}>上一頁</Button><span>{page + 1}</span><Button disabled={busy || !more} onClick={() => tab === 'members' ? void list(page + 1) : void loadLogs(tab, page + 1)}>下一頁</Button></div>}
++  </main>;
++}
+diff --git a/components/member-panel.tsx b/components/member-panel.tsx
+index 333f275..cd0caf0 100644
+--- a/components/member-panel.tsx
++++ b/components/member-panel.tsx
+@@ -1,95 +1,83 @@
+ "use client";
+ 
+-import { useEffect, useState, type FormEvent } from "react";
+-import { CircleUserRound, LogOut, ShieldCheck } from "lucide-react";
+-import { Button } from "@/components/ui/button";
+-import { Input } from "@/components/ui/input";
+-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+-import type { Member } from "@/lib/member-types";
++import { useEffect, useState, type FormEvent } from 'react';
++import { CircleUserRound, LogOut } from 'lucide-react';
++import { Button } from '@/components/ui/button';
++import { Input } from '@/components/ui/input';
++import type { Member } from '@/lib/member-types';
+ 
+-async function submit(path: string, method: string, data?: Record<string, unknown>) {
+-  const response = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+-  const result = await response.json() as { error?: string };
+-  if (!response.ok) throw new Error(result.error ?? "操作失敗，請稍後再試。");
+-  return result;
+-}
+-
+-export function MemberPanel({ member, loading, error, onRefresh }: { member: Member | null; loading: boolean; error: string; onRefresh: () => Promise<void> }) {
+-  const [mode, setMode] = useState("login");
++export function MemberPanel({ member, loading, error, onRefresh, registrationEnabled }: { member: Member | null; loading: boolean; error: string; onRefresh: () => Promise<void>; registrationEnabled: boolean }) {
++  const [legacy, setLegacy] = useState(false);
+   const [busy, setBusy] = useState(false);
+-  const [message, setMessage] = useState("");
+-  const [failed, setFailed] = useState(false);
+-
+-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+-    event.preventDefault();
+-    if (busy) return;
+-    const data = Object.fromEntries(new FormData(event.currentTarget));
+-    setMessage(""); setFailed(false);
+-    if (!member && mode === "register" && data.password !== data.confirmPassword) {
+-      setFailed(true); setMessage("兩次密碼不一致，請重新確認。"); return;
+-    }
+-    setBusy(true);
++  const [message, setMessage] = useState('');
++  const [phone, setPhone] = useState('');
++  const [challenge, setChallenge] = useState('');
++  const [cooldown, setCooldown] = useState(0);
++  const [expires, setExpires] = useState(0);
++  const [remaining, setRemaining] = useState(0);
++  const [history, setHistory] = useState<Array<{ id: string; type: string; value: string; created_at: string }>>([]);
++  const [claims, setClaims] = useState<Array<{ id: string; reward_key: string; status: string }>>([]);
++  useEffect(() => {
++    const timer = setInterval(() => { setCooldown(value => Math.max(0, value - 1)); setRemaining(Math.max(0, Math.ceil((expires - Date.now()) / 1000))); }, 1000);
++    return () => clearInterval(timer);
++  }, [expires]);
++  useEffect(() => {
++    if (!member) return;
++    const controller = new AbortController();
++    fetch('/api/player/history', { signal: controller.signal }).then(async r => { if (!r.ok) throw new Error('無法讀取玩家紀錄。'); return r.json() as Promise<{ history: Array<{ id: string; type: string; value: string; created_at: string }>; claims: Array<{ id: string; reward_key: string; status: string }> }>; }).then(data => { setHistory(data.history); setClaims(data.claims); }).catch(e => { if (!controller.signal.aborted) setMessage(e.message); });
++    return () => controller.abort();
++  }, [member]);
++  async function request(path: string, data: Record<string, unknown> = {}) {
++    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
++    const result = await r.json() as { error?: string; challengeId: string; expiresIn: number; resendAfter: number }; if (!r.ok) throw new Error(result.error ?? '操作失敗。'); return result;
++  }
++  async function send() {
++    if (busy || cooldown) return;
++    setBusy(true); setMessage('');
++    try { const data = await request('/api/member/otp/send', { phone }); setChallenge(data.challengeId); setExpires(Date.now() + data.expiresIn * 1000); setRemaining(data.expiresIn); setCooldown(data.resendAfter); setMessage('驗證碼已發送。'); }
++    catch (e) { setMessage((e as Error).message); }
++    finally { setBusy(false); }
++  }
++  async function submit(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault(); if (busy) return;
++    const form = Object.fromEntries(new FormData(event.currentTarget));
++    if (!legacy && !challenge) { await send(); return; }
++    setBusy(true); setMessage('');
+     try {
+-      await submit(member ? "/api/member" : `/api/member/${mode}`, member ? "PATCH" : "POST", data);
+-      await onRefresh();
+-      setMessage(member ? "會員資料已儲存。" : mode === "register" ? "註冊成功，歡迎加入 re:world！" : "登入成功。");
+-    } catch (error) { setFailed(true); setMessage((error as Error).message); }
++      await request(legacy ? '/api/member/login' : '/api/member/otp/verify', legacy ? form : { phone, challengeId: challenge, code: form.code });
++      await onRefresh(); setChallenge(''); setMessage(legacy ? 'LOGIN SUCCESS' : 'IDENTITY VERIFIED');
++    } catch (e) { setMessage((e as Error).message); }
+     finally { setBusy(false); }
+   }
+-
+   async function logout() {
+-    setBusy(true); setMessage(""); setFailed(false);
+-    try { await submit("/api/member/logout", "POST"); await onRefresh(); setMessage("已登出。"); }
+-    catch (error) { setFailed(true); setMessage((error as Error).message); }
++    setBusy(true);
++    try { await request('/api/member/logout'); setHistory([]); setClaims([]); await onRefresh(); setMessage('GUEST MODE'); }
++    catch (e) { setMessage((e as Error).message); }
+     finally { setBusy(false); }
+   }
+-
+   return <div className="screen member-screen">
+     <div className="eyebrow">PLAYER ID · 05</div>
+-    <h1>{member ? "會員資料" : "加入 re:world"}</h1>
+-    <p className="screen-copy">{member ? "你的會員資料與冒險紀錄，隨帳號一起保存。" : "登入或註冊，保存每一次角色選擇與獎勵。"}</p>
+-    {loading ? <p className="empty-state" role="status">正在讀取會員資料…</p> : error ? <div className="empty-state"><p role="alert">{error}</p><Button onClick={() => { void onRefresh().catch(() => {}); }}>重新讀取</Button></div> : <>
+-      {member ? <div className="member-card"><CircleUserRound size={38} /><div><strong>{member.displayName}</strong><span>@{member.username}</span><small>加入日期：{member.createdAt.slice(0, 10)}</small></div></div> : <Tabs value={mode} onValueChange={value => { setMode(value); setMessage(""); }} className="auth-tabs"><TabsList aria-label="會員登入或註冊"><TabsTrigger value="login" disabled={busy}>登入</TabsTrigger><TabsTrigger value="register" disabled={busy}>註冊</TabsTrigger></TabsList></Tabs>}
+-      <form className="member-form" onSubmit={handleSubmit} key={`${member?.id ?? "guest"}-${mode}`}>
+-        {!member && <label>帳號<Input name="username" required minLength={2} maxLength={24} autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="可使用暱稱或本名" disabled={busy} /><small>2–24 個中文、英文、數字或底線；英文不分大小寫。</small></label>}
+-        {(member || mode === "register") && <label>暱稱或本名<Input name="displayName" required maxLength={40} autoComplete="nickname" defaultValue={member?.displayName} placeholder="希望我們怎麼稱呼你？" disabled={busy} /></label>}
+-        {!member && <label>密碼<Input name="password" type="password" required minLength={8} maxLength={128} autoComplete={mode === "register" ? "new-password" : "current-password"} placeholder="至少 8 個字元" disabled={busy} /></label>}
+-        {!member && mode === "register" && <label>確認密碼<Input name="confirmPassword" type="password" required minLength={8} maxLength={128} autoComplete="new-password" placeholder="再次輸入密碼" disabled={busy} /></label>}
+-        {(member || mode === "register") && <>
+-          <label>聯絡電話 <span>選填</span><Input name="phone" type="tel" maxLength={24} autoComplete="tel" defaultValue={member?.phone} disabled={busy} /></label>
+-          <label>Email <span>選填</span><Input name="email" type="email" maxLength={254} autoComplete="email" defaultValue={member?.email} disabled={busy} /></label>
+-          <p className="form-note">暱稱及選填聯絡資料會儲存為 re:world 的會員資料，供店家提供會員服務。</p>
++    <h1>{member ? 'PLAYER ID' : 'CREATE PLAYER ID'}</h1>
++    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : 'GUEST 也能 ACCESS、看酒單與抽卡。手機驗證後，保存未來的冒險紀錄。'}</p>
++    {loading ? <p role="status">正在讀取玩家資料…</p> : error ? <div><p role="alert">{error}</p><Button onClick={() => void onRefresh().catch(() => {})}>重試</Button><Button disabled={busy} onClick={logout}>回到 GUEST</Button></div> : member ? <>
++      <div className="member-card"><CircleUserRound size={32} /><div><strong>{member.playerId}</strong><span>{member.phoneVerified ? 'IDENTITY VERIFIED' : 'LEGACY PLAYER'}</span><small>{member.phone || member.username}</small><small>{member.status.toUpperCase()}</small></div></div>
++      <h2>CLASS HISTORY</h2>
++      {history.length ? history.map(item => <article className="directory-entry" key={item.id}><strong>{item.value}</strong><small>{item.created_at}</small></article>) : <p className="screen-copy">尚無角色選擇紀錄。</p>}
++      <h2>REWARD / CLAIM</h2>
++      {claims.length ? claims.map(item => <article className="directory-entry" key={item.id}><strong>{item.reward_key}</strong><span>{item.status.toUpperCase()}</span></article>) : <p className="screen-copy">尚無會員限定 Reward。抽卡獎勵可至冒險紀錄查看。</p>}
++      <Button className="logout-action" onClick={logout} disabled={busy}><LogOut size={16} />登出</Button>
++      {member.accessRole === 'admin' && <a className="primary-action" href="/admin">OPERATIONS CONSOLE</a>}
++    </> : <>
++      {!registrationEnabled && <p className="system-notice">REGISTRATION OFFLINE · 已有 PLAYER 仍可登入。</p>}
++      <form className="member-form" onSubmit={submit}>
++        {legacy ? <><label>原有帳號<Input name="username" required autoComplete="username" disabled={busy} /></label><label>密碼<Input name="password" type="password" required autoComplete="current-password" disabled={busy} /></label></> : <>
++          <label>PHONE NUMBER<Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || Boolean(challenge)} placeholder="09xxxxxxxx" autoComplete="tel" required /></label>
++          {challenge && <><label>SMS OTP<Input key={challenge} name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" placeholder="六位數驗證碼" required disabled={busy} /></label><small>{remaining > 0 ? `驗證碼有效時間：${remaining} 秒` : '驗證碼已過期，請重新發送。'}</small><Button type="button" variant="outline" disabled={busy || cooldown > 0} onClick={send}>{cooldown ? `${cooldown} 秒後可重送` : 'RESEND OTP'}</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setChallenge(''); setMessage(''); }}>修改手機號碼</Button></>}
+         </>}
+-        <Button type="submit" className="primary-action" disabled={busy}>{busy ? "處理中…" : member ? "儲存會員資料" : mode === "register" ? "建立會員帳號" : "登入"}</Button>
++        <Button type="submit" className="primary-action" disabled={busy || (!legacy && Boolean(challenge) && !remaining)}>{busy ? '處理中…' : legacy ? 'LOGIN' : challenge ? 'VERIFY IDENTITY' : 'SEND OTP'}</Button>
+       </form>
+-      {member && <Button variant="outline" className="logout-action" onClick={logout} disabled={busy}><LogOut size={16} />登出</Button>}
+-      {message && <p className={failed ? "form-message error" : "form-message"} role={failed ? "alert" : "status"}>{message}</p>}
+-      {member?.accessRole === "admin" && <MemberDirectory />}
++      <Button variant="ghost" disabled={busy} onClick={() => { setLegacy(!legacy); setMessage(''); }}>{legacy ? '使用手機驗證' : '原有帳號登入'}</Button>
+     </>}
++    {message && <p className="form-message" role="status">{message}</p>}
+   </div>;
+ }
+-
+-function MemberDirectory() {
+-  const [page, setPage] = useState(0);
+-  const [members, setMembers] = useState<Array<Member & { drawCount: number }>>([]);
+-  const [hasMore, setHasMore] = useState(false);
+-  const [error, setError] = useState("");
+-  const [loading, setLoading] = useState(true);
+-  const [retry, setRetry] = useState(0);
+-  useEffect(() => {
+-    const controller = new AbortController();
+-    fetch(`/api/admin/members?page=${page}`, { signal: controller.signal }).then(async response => {
+-      const data = await response.json() as { error?: string; members: Array<Member & { drawCount: number }>; hasMore: boolean };
+-      if (!response.ok) throw new Error(data.error);
+-      setMembers(data.members); setHasMore(data.hasMore);
+-    }).catch(error => { if (error.name !== "AbortError") setError(error.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+-    return () => controller.abort();
+-  }, [page, retry]);
+-  function changePage(next: number) { setLoading(true); setError(""); setMembers([]); setPage(next); }
+-  return <section className="member-directory">
+-    <h2><ShieldCheck size={20} />店家會員名單</h2>
+-    {loading && <p role="status">正在讀取名單…</p>}
+-    {error && <><p role="alert">{error}</p><Button onClick={() => { setLoading(true); setError(""); setRetry(value => value + 1); }}>重試</Button></>}
+-    {!loading && !error && <><p className="form-note">第 {page + 1} 頁 · 此頁 {members.length} 位會員</p>{members.map(item => <article className="directory-entry" key={item.id}><strong>{item.displayName}</strong><span>@{item.username}</span><span>電話：{item.phone || "未填寫"}</span><span>Email：{item.email || "未填寫"}</span><small>加入 {item.createdAt.slice(0, 10)} · 抽卡 {item.drawCount} 次</small></article>)}<div className="directory-pagination"><Button variant="outline" disabled={page === 0} onClick={() => changePage(page - 1)}>上一頁</Button><Button variant="outline" disabled={!hasMore} onClick={() => changePage(page + 1)}>下一頁</Button></div></>}
+-  </section>;
+-}
+diff --git a/db/schema.ts b/db/schema.ts
+index 18eb37a..a064540 100644
+--- a/db/schema.ts
++++ b/db/schema.ts
+@@ -1,5 +1,5 @@
+ import { sql } from "drizzle-orm";
+-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
++import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+ 
+ export const members = sqliteTable("members", {
+   id: text("id").primaryKey(),
+@@ -10,7 +10,11 @@ export const members = sqliteTable("members", {
+   passwordHash: text("password_hash").notNull(),
+   accessRole: text("access_role").notNull().default("member"),
+   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+-}, (table) => [uniqueIndex("idx_members_username").on(table.username)]);
++  playerId: text('player_id'),
++  phoneVerified: integer('phone_verified').notNull().default(0),
++  status: text('status').notNull().default('active'),
++  lastLoginAt: text('last_login_at'),
++}, (table) => [uniqueIndex("idx_members_username").on(table.username), uniqueIndex('idx_members_player_id').on(table.playerId), uniqueIndex('idx_members_verified_phone').on(table.phone).where(sql`${table.phoneVerified} = 1`)]);
+ 
+ export const memberSessions = sqliteTable("member_sessions", {
+   tokenHash: text("token_hash").primaryKey(),
+@@ -37,3 +41,43 @@ export const rewardDraws = sqliteTable(
+   },
+   (table) => [index("idx_reward_draws_member_created").on(table.memberId, table.createdAt)],
+ );
++
++export const systemSettings = sqliteTable('system_settings', {
++  id: integer('id').primaryKey(),
++  storeOnline: integer('store_online').notNull().default(1),
++  doorAccessEnabled: integer('door_access_enabled').notNull().default(0),
++  cardDrawEnabled: integer('card_draw_enabled').notNull().default(1),
++  registrationEnabled: integer('registration_enabled').notNull().default(1),
++  maintenanceMessage: text('maintenance_message').notNull().default(''),
++  doorPin: text('door_pin'),
++  doorPinDisplaySeconds: integer('door_pin_display_seconds').notNull().default(15),
++  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
++}, t => [check('single_settings', sql`${t.id} = 1`), check('display_seconds_range', sql`${t.doorPinDisplaySeconds} BETWEEN 5 AND 60`)]);
++export const playerHistory = sqliteTable('player_history', {
++  id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => members.id),
++  type: text('type').notNull(), value: text('value').notNull(), createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
++}, t => [index('idx_player_history_user').on(t.userId, t.createdAt)]);
++export const doorAccessLogs = sqliteTable('door_access_logs', {
++  id: text('id').primaryKey(), userId: text('user_id').references(() => members.id), sessionId: text('session_id'),
++  accessedAt: text('accessed_at').notNull().default(sql`CURRENT_TIMESTAMP`), result: text('result').notNull(),
++}, t => [index('idx_door_access_time').on(t.accessedAt)]);
++export const adminLogs = sqliteTable('admin_logs', {
++  id: text('id').primaryKey(), adminId: text('admin_id').notNull().references(() => members.id),
++  action: text('action').notNull(), createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
++});
++export const guestDraws = sqliteTable('guest_draws', {
++  id: text('id').primaryKey(), sessionId: text('session_id').notNull(), role: text('role').notNull(), reward: text('reward').notNull(),
++  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
++}, t => [index('idx_guest_draws_time').on(t.createdAt)]);
++export const rewardClaims = sqliteTable('reward_claims', {
++  id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => members.id), rewardKey: text('reward_key').notNull(),
++  status: text('status').notNull().default('unlocked'), createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`), claimedAt: text('claimed_at'),
++}, t => [check('claim_status', sql`${t.status} IN ('unlocked','claimed','expired')`)]);
++export const otpChallenges = sqliteTable('otp_challenges', {
++  id: text('id').primaryKey(), phone: text('phone').notNull(), codeHash: text('code_hash').notNull(),
++  expiresAt: integer('expires_at').notNull(), attempts: integer('attempts').notNull().default(0),
++  consumed: integer('consumed').notNull().default(0), sent: integer('sent').notNull().default(0),
++}, t => [index('idx_otp_phone').on(t.phone, t.expiresAt)]);
++export const otpLimits = sqliteTable('otp_limits', {
++  key: text('key').primaryKey(), attempts: integer('attempts').notNull(), expiresAt: integer('expires_at').notNull(),
++});
+diff --git a/drizzle/0002_player_operations.sql b/drizzle/0002_player_operations.sql
+new file mode 100644
+index 0000000..fe4a257
+--- /dev/null
++++ b/drizzle/0002_player_operations.sql
+@@ -0,0 +1,89 @@
++CREATE TABLE `admin_logs` (
++	`id` text PRIMARY KEY NOT NULL,
++	`admin_id` text NOT NULL,
++	`action` text NOT NULL,
++	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
++	FOREIGN KEY (`admin_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
++);
++--> statement-breakpoint
++CREATE TABLE `door_access_logs` (
++	`id` text PRIMARY KEY NOT NULL,
++	`user_id` text,
++	`session_id` text,
++	`accessed_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
++	`result` text NOT NULL,
++	FOREIGN KEY (`user_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
++);
++--> statement-breakpoint
++CREATE INDEX `idx_door_access_time` ON `door_access_logs` (`accessed_at`);--> statement-breakpoint
++CREATE TABLE `guest_draws` (
++	`id` text PRIMARY KEY NOT NULL,
++	`session_id` text NOT NULL,
++	`role` text NOT NULL,
++	`reward` text NOT NULL,
++	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
++);
++--> statement-breakpoint
++CREATE INDEX `idx_guest_draws_time` ON `guest_draws` (`created_at`);--> statement-breakpoint
++CREATE TABLE `otp_challenges` (
++	`id` text PRIMARY KEY NOT NULL,
++	`phone` text NOT NULL,
++	`code_hash` text NOT NULL,
++	`expires_at` integer NOT NULL,
++	`attempts` integer DEFAULT 0 NOT NULL,
++	`consumed` integer DEFAULT 0 NOT NULL,
++	`sent` integer DEFAULT 0 NOT NULL
++);
++--> statement-breakpoint
++CREATE INDEX `idx_otp_phone` ON `otp_challenges` (`phone`,`expires_at`);--> statement-breakpoint
++CREATE TABLE `otp_limits` (
++	`key` text PRIMARY KEY NOT NULL,
++	`attempts` integer NOT NULL,
++	`expires_at` integer NOT NULL
++);
++--> statement-breakpoint
++CREATE TABLE `player_history` (
++	`id` text PRIMARY KEY NOT NULL,
++	`user_id` text NOT NULL,
++	`type` text NOT NULL,
++	`value` text NOT NULL,
++	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
++	FOREIGN KEY (`user_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action
++);
++--> statement-breakpoint
++CREATE INDEX `idx_player_history_user` ON `player_history` (`user_id`,`created_at`);--> statement-breakpoint
++CREATE TABLE `reward_claims` (
++	`id` text PRIMARY KEY NOT NULL,
++	`user_id` text NOT NULL,
++	`reward_key` text NOT NULL,
++	`status` text DEFAULT 'unlocked' NOT NULL,
++	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
++	`claimed_at` text,
++	FOREIGN KEY (`user_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action,
++	CONSTRAINT "claim_status" CHECK("reward_claims"."status" IN ('unlocked','claimed','expired'))
++);
++--> statement-breakpoint
++CREATE TABLE `system_settings` (
++	`id` integer PRIMARY KEY NOT NULL,
++	`store_online` integer DEFAULT 1 NOT NULL,
++	`door_access_enabled` integer DEFAULT 0 NOT NULL,
++	`card_draw_enabled` integer DEFAULT 1 NOT NULL,
++	`registration_enabled` integer DEFAULT 1 NOT NULL,
++	`maintenance_message` text DEFAULT '' NOT NULL,
++	`door_pin` text,
++	`door_pin_display_seconds` integer DEFAULT 15 NOT NULL,
++	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
++	CONSTRAINT "single_settings" CHECK("system_settings"."id" = 1),
++	CONSTRAINT "display_seconds_range" CHECK("system_settings"."door_pin_display_seconds" BETWEEN 5 AND 60)
++);
++--> statement-breakpoint
++ALTER TABLE `members` ADD `player_id` text;--> statement-breakpoint
++ALTER TABLE `members` ADD `phone_verified` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
++ALTER TABLE `members` ADD `status` text DEFAULT 'active' NOT NULL;--> statement-breakpoint
++ALTER TABLE `members` ADD `last_login_at` text;--> statement-breakpoint
++CREATE UNIQUE INDEX `idx_members_player_id` ON `members` (`player_id`);--> statement-breakpoint
++CREATE UNIQUE INDEX `idx_members_verified_phone` ON `members` (`phone`) WHERE "members"."phone_verified" = 1;
++--> statement-breakpoint
++UPDATE members SET player_id = 'RW-' || upper(replace(id, '-', ''));
++--> statement-breakpoint
++INSERT INTO system_settings(id) VALUES(1);
+diff --git a/drizzle/meta/0002_snapshot.json b/drizzle/meta/0002_snapshot.json
+new file mode 100644
+index 0000000..38501ee
+--- /dev/null
++++ b/drizzle/meta/0002_snapshot.json
+@@ -0,0 +1,812 @@
++{
++  "version": "6",
++  "dialect": "sqlite",
++  "id": "d0a49fca-9cef-4580-87a4-6ad06cfb16dc",
++  "prevId": "c03c560a-0ec9-4473-894d-5a46fa617881",
++  "tables": {
++    "admin_logs": {
++      "name": "admin_logs",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "admin_id": {
++          "name": "admin_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "action": {
++          "name": "action",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "admin_logs_admin_id_members_id_fk": {
++          "name": "admin_logs_admin_id_members_id_fk",
++          "tableFrom": "admin_logs",
++          "tableTo": "members",
++          "columnsFrom": [
++            "admin_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "no action",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "auth_limits": {
++      "name": "auth_limits",
++      "columns": {
++        "key": {
++          "name": "key",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "attempts": {
++          "name": "attempts",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "idx_auth_limits_expiry": {
++          "name": "idx_auth_limits_expiry",
++          "columns": [
++            "expires_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "door_access_logs": {
++      "name": "door_access_logs",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "session_id": {
++          "name": "session_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "accessed_at": {
++          "name": "accessed_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        },
++        "result": {
++          "name": "result",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "idx_door_access_time": {
++          "name": "idx_door_access_time",
++          "columns": [
++            "accessed_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "door_access_logs_user_id_members_id_fk": {
++          "name": "door_access_logs_user_id_members_id_fk",
++          "tableFrom": "door_access_logs",
++          "tableTo": "members",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "no action",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "guest_draws": {
++      "name": "guest_draws",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "session_id": {
++          "name": "session_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "role": {
++          "name": "role",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "reward": {
++          "name": "reward",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        }
++      },
++      "indexes": {
++        "idx_guest_draws_time": {
++          "name": "idx_guest_draws_time",
++          "columns": [
++            "created_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "member_sessions": {
++      "name": "member_sessions",
++      "columns": {
++        "token_hash": {
++          "name": "token_hash",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "member_id": {
++          "name": "member_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "idx_member_sessions_expiry": {
++          "name": "idx_member_sessions_expiry",
++          "columns": [
++            "expires_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "member_sessions_member_id_members_id_fk": {
++          "name": "member_sessions_member_id_members_id_fk",
++          "tableFrom": "member_sessions",
++          "tableTo": "members",
++          "columnsFrom": [
++            "member_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "members": {
++      "name": "members",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "username": {
++          "name": "username",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "display_name": {
++          "name": "display_name",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "phone": {
++          "name": "phone",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "''"
++        },
++        "email": {
++          "name": "email",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "''"
++        },
++        "password_hash": {
++          "name": "password_hash",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "access_role": {
++          "name": "access_role",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'member'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        },
++        "player_id": {
++          "name": "player_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "phone_verified": {
++          "name": "phone_verified",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'active'"
++        },
++        "last_login_at": {
++          "name": "last_login_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "idx_members_username": {
++          "name": "idx_members_username",
++          "columns": [
++            "username"
++          ],
++          "isUnique": true
++        },
++        "idx_members_player_id": {
++          "name": "idx_members_player_id",
++          "columns": [
++            "player_id"
++          ],
++          "isUnique": true
++        },
++        "idx_members_verified_phone": {
++          "name": "idx_members_verified_phone",
++          "columns": [
++            "phone"
++          ],
++          "isUnique": true,
++          "where": "\"members\".\"phone_verified\" = 1"
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "otp_challenges": {
++      "name": "otp_challenges",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "phone": {
++          "name": "phone",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "code_hash": {
++          "name": "code_hash",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "attempts": {
++          "name": "attempts",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "consumed": {
++          "name": "consumed",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "sent": {
++          "name": "sent",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        }
++      },
++      "indexes": {
++        "idx_otp_phone": {
++          "name": "idx_otp_phone",
++          "columns": [
++            "phone",
++            "expires_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "otp_limits": {
++      "name": "otp_limits",
++      "columns": {
++        "key": {
++          "name": "key",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "attempts": {
++          "name": "attempts",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "player_history": {
++      "name": "player_history",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "type": {
++          "name": "type",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "value": {
++          "name": "value",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        }
++      },
++      "indexes": {
++        "idx_player_history_user": {
++          "name": "idx_player_history_user",
++          "columns": [
++            "user_id",
++            "created_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "player_history_user_id_members_id_fk": {
++          "name": "player_history_user_id_members_id_fk",
++          "tableFrom": "player_history",
++          "tableTo": "members",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "no action",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "reward_claims": {
++      "name": "reward_claims",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "reward_key": {
++          "name": "reward_key",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'unlocked'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        },
++        "claimed_at": {
++          "name": "claimed_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "reward_claims_user_id_members_id_fk": {
++          "name": "reward_claims_user_id_members_id_fk",
++          "tableFrom": "reward_claims",
++          "tableTo": "members",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "no action",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {
++        "claim_status": {
++          "name": "claim_status",
++          "value": "\"reward_claims\".\"status\" IN ('unlocked','claimed','expired')"
++        }
++      }
++    },
++    "reward_draws": {
++      "name": "reward_draws",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "member_id": {
++          "name": "member_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "member_name": {
++          "name": "member_name",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'測試會員'"
++        },
++        "role": {
++          "name": "role",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "reward": {
++          "name": "reward",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "used": {
++          "name": "used",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        }
++      },
++      "indexes": {
++        "idx_reward_draws_member_created": {
++          "name": "idx_reward_draws_member_created",
++          "columns": [
++            "member_id",
++            "created_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "system_settings": {
++      "name": "system_settings",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "store_online": {
++          "name": "store_online",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 1
++        },
++        "door_access_enabled": {
++          "name": "door_access_enabled",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "card_draw_enabled": {
++          "name": "card_draw_enabled",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 1
++        },
++        "registration_enabled": {
++          "name": "registration_enabled",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 1
++        },
++        "maintenance_message": {
++          "name": "maintenance_message",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "''"
++        },
++        "door_pin": {
++          "name": "door_pin",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "door_pin_display_seconds": {
++          "name": "door_pin_display_seconds",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 15
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "CURRENT_TIMESTAMP"
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {
++        "single_settings": {
++          "name": "single_settings",
++          "value": "\"system_settings\".\"id\" = 1"
++        },
++        "display_seconds_range": {
++          "name": "display_seconds_range",
++          "value": "\"system_settings\".\"door_pin_display_seconds\" BETWEEN 5 AND 60"
++        }
++      }
++    }
++  },
++  "views": {},
++  "enums": {},
++  "_meta": {
++    "schemas": {},
++    "tables": {},
++    "columns": {}
++  },
++  "internal": {
++    "indexes": {}
++  }
++}
+\ No newline at end of file
+diff --git a/drizzle/meta/_journal.json b/drizzle/meta/_journal.json
+index eba5b22..ce882b7 100644
+--- a/drizzle/meta/_journal.json
++++ b/drizzle/meta/_journal.json
+@@ -15,6 +15,13 @@
+       "when": 1788888354862,
+       "tag": "0001_previous_millenium_guard",
+       "breakpoints": true
++    },
++    {
++      "idx": 2,
++      "version": "6",
++      "when": 1789265394151,
++      "tag": "0002_player_operations",
++      "breakpoints": true
+     }
+   ]
+-}
+\ No newline at end of file
++}
+diff --git a/lib/member-auth.ts b/lib/member-auth.ts
+index ef79b1e..0be3681 100644
+--- a/lib/member-auth.ts
++++ b/lib/member-auth.ts
+@@ -4,8 +4,8 @@ import { scrypt, timingSafeEqual } from "node:crypto";
+ import type { Member } from "./member-types";
+ 
+ const COOKIE = "reworld_session";
+-const SESSION_SECONDS = 7 * 24 * 60 * 60;
+-export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt";
++const SESSION_SECONDS = 90 * 24 * 60 * 60;
++export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt, m.player_id AS playerId, m.phone_verified AS phoneVerified, m.status, m.last_login_at AS lastLoginAt";
+ export function database() { return env.DB as D1Database; }
+ export class ApiError extends Error {
+   constructor(public status: number, message: string) { super(message); }
+@@ -87,7 +87,9 @@ export function cookie(request: Request, token: string, maxAge = SESSION_SECONDS
+ export async function currentMember(request: Request): Promise<Member | null> {
+   const token = sessionToken(request);
+   if (!token) return null;
+-  return database().prepare(`SELECT ${memberColumns} FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token_hash = ? AND s.expires_at > ?`).bind(await digest(token), Date.now()).first<Member>();
++  const member = await database().prepare(`SELECT ${memberColumns} FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token_hash = ? AND s.expires_at > ?`).bind(await digest(token), Date.now()).first<Member>();
++  if (member?.status === 'suspended') throw new ApiError(403, 'PLAYER SUSPENDED');
++  return member;
+ }
+ export async function requireMember(request: Request) {
+   const member = await currentMember(request);
+@@ -97,10 +99,13 @@ export async function requireMember(request: Request) {
+ export async function createSession(request: Request, memberId: string) {
+   const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
+   const db = database();
++  const active = await db.prepare("SELECT id FROM members WHERE id = ? AND status = 'active'").bind(memberId).first();
++  if (!active) throw new ApiError(403, 'PLAYER SUSPENDED');
+   const old = sessionToken(request);
+   const statements = [db.prepare("DELETE FROM member_sessions WHERE expires_at <= ?").bind(Date.now())];
+   if (old) statements.push(db.prepare("DELETE FROM member_sessions WHERE token_hash = ?").bind(await digest(old)));
+   statements.push(db.prepare("INSERT INTO member_sessions (token_hash, member_id, expires_at) VALUES (?, ?, ?)").bind(await digest(token), memberId, Date.now() + SESSION_SECONDS * 1000));
++  statements.push(db.prepare('UPDATE members SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').bind(memberId));
+   await db.batch(statements);
+   return cookie(request, token);
+ }
+diff --git a/lib/member-types.ts b/lib/member-types.ts
+index e40e479..476ad3f 100644
+--- a/lib/member-types.ts
++++ b/lib/member-types.ts
+@@ -6,4 +6,8 @@ export type Member = {
+   email: string;
+   accessRole: "member" | "admin";
+   createdAt: string;
++  playerId: string;
++  phoneVerified: number;
++  status: 'active' | 'suspended';
++  lastLoginAt: string | null;
+ };
+diff --git a/lib/operations.ts b/lib/operations.ts
+new file mode 100644
+index 0000000..6aa838f
+--- /dev/null
++++ b/lib/operations.ts
+@@ -0,0 +1,27 @@
++import { ApiError, database, digest, requireMember } from './member-auth';
++
++export type PublicSettings = {
++  store_online: number; door_access_enabled: number; card_draw_enabled: number;
++  registration_enabled: number; maintenance_message: string; door_pin_display_seconds: number;
++};
++export const publicSettingsColumns = 'store_online, door_access_enabled, card_draw_enabled, registration_enabled, maintenance_message, door_pin_display_seconds';
++export async function settings() {
++  const value = await database().prepare(`SELECT ${publicSettingsColumns} FROM system_settings WHERE id = 1`).first<PublicSettings>();
++  if (!value) throw new ApiError(503, 'SYSTEM UNAVAILABLE');
++  return value;
++}
++export async function requireAdmin(request: Request) {
++  const member = await requireMember(request);
++  if (member.accessRole !== 'admin') throw new ApiError(403, 'ACCESS DENIED');
++  return member;
++}
++export function audit(adminId: string, action: string) {
++  return database().prepare('INSERT INTO admin_logs(id, admin_id, action) VALUES (?, ?, ?)').bind(crypto.randomUUID(), adminId, action);
++}
++export async function guestSession(request: Request) {
++  const candidate = request.headers.get('cookie')?.split(';').map(x => x.trim()).find(x => x.startsWith('reworld_guest='))?.slice(14);
++  const token = candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
++  const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
++  return { id: await digest(token), cookie: `reworld_guest=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}` };
++}
++export const playerRoles = ['高級牛馬', '摸魚大師', '畫餅充飢', '人生勝利組'];
+diff --git a/lib/otp.ts b/lib/otp.ts
+new file mode 100644
+index 0000000..148c8c5
+--- /dev/null
++++ b/lib/otp.ts
+@@ -0,0 +1,32 @@
++import { env } from 'cloudflare:workers';
++import { ApiError, database, digest } from './member-auth';
++
++// Provider-neutral server binding. No console sender, fixed OTP or client bypass.
++type SmsEnvironment = { SMS?: Fetcher; OTP_SECRET?: string };
++export function smsConfiguration() {
++  const config = env as unknown as SmsEnvironment;
++  if (!config.SMS || !config.OTP_SECRET || config.OTP_SECRET.length < 32) throw new ApiError(503, '手機驗證暫時無法使用，請繼續以 GUEST 體驗。');
++  return { sms: config.SMS, secret: config.OTP_SECRET };
++}
++export function normalizePhone(value: unknown) {
++  const phone = typeof value === 'string' ? value.trim().replace(/[ -]/g, '') : '';
++  if (/^09\d{8}$/.test(phone)) return '+886' + phone.slice(1);
++  if (/^\+8869\d{8}$/.test(phone)) return phone;
++  throw new ApiError(400, '請輸入有效的台灣手機號碼。');
++}
++export async function otpHash(id: string, phone: string, code: string, secret: string) {
++  const encoder = new TextEncoder();
++  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
++  return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(`${id}:${phone}:${code}`))), n => n.toString(16).padStart(2, '0')).join('');
++}
++export async function otpSendLimit(request: Request, phone: string) {
++  const now = Date.now();
++  const window = Math.floor(now / 3600000);
++  const ip = request.headers.get('cf-connecting-ip') ?? 'local';
++  const keys = await Promise.all([digest(`otp:cooldown:${phone}`), digest(`otp:phone:${phone}:${window}`), digest(`otp:ip:${ip}:${window}`)]);
++  const db = database();
++  const results = await db.batch<{ attempts: number }>(keys.map((key, i) => db.prepare('INSERT INTO otp_limits(key, attempts, expires_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET attempts = CASE WHEN expires_at <= ? THEN 1 ELSE attempts + 1 END, expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END RETURNING attempts').bind(key, i === 0 ? now + 60000 : (window + 1) * 3600000, now, now)));
++  if (results[0].results[0].attempts > 1) throw new ApiError(429, '請等待 60 秒再重新發送。');
++  if (results[1].results[0].attempts > 5 || results[2].results[0].attempts > 20) throw new ApiError(429, '發送次數過多，請稍後再試。');
++  await db.batch([db.prepare('DELETE FROM otp_limits WHERE expires_at < ?').bind(now), db.prepare('DELETE FROM otp_challenges WHERE expires_at < ?').bind(now - 86400000)]);
++}
+diff --git a/package-lock.json b/package-lock.json
+index c9e3fba..56c24a6 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -50,7 +50,9 @@
+         "typescript": "5.9.3",
+         "vinext": "0.0.50",
+         "vite": "8.0.13",
+-        "wrangler": "4.92.0"
++        "wrangler": "4.92.0",
++        "miniflare": "4.20260515.0",
++        "esbuild": "0.28.0"
+       },
+       "engines": {
+         "node": ">=22.13.0"
+diff --git a/package.json b/package.json
+index bb81126..b51ec00 100644
+--- a/package.json
++++ b/package.json
+@@ -10,10 +10,12 @@
+     "build": "bash scripts/build-verified.sh",
+     "preview": "vite preview",
+     "typecheck": "tsc --noEmit",
+-    "lint": "eslint app components/member-panel.tsx components/menu-board.tsx lib db",
++    "lint": "eslint app components lib db tests --ignore-pattern components/ui",
+     "db:generate": "drizzle-kit generate",
+     "db:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+-    "deploy": "node scripts/configure-cloudflare.mjs && npm run build && wrangler d1 migrations apply DB --remote --config wrangler.jsonc && wrangler deploy --config dist/server/wrangler.json"
++    "deploy": "node scripts/configure-cloudflare.mjs && npm run build && wrangler d1 migrations apply DB --remote --config wrangler.jsonc && wrangler deploy --config dist/server/wrangler.json",
++    "test": "npm run build && node --test tests/*.test.mjs",
++    "test:api": "node --test tests/operations.test.mjs"
+   },
+   "dependencies": {
+     "@base-ui/react": "^1.7.0",
+@@ -58,7 +60,9 @@
+     "typescript": "5.9.3",
+     "vinext": "0.0.50",
+     "vite": "8.0.13",
+-    "wrangler": "4.92.0"
++    "wrangler": "4.92.0",
++    "miniflare": "4.20260515.0",
++    "esbuild": "0.28.0"
+   },
+   "type": "module"
+ }
+diff --git a/tests/member-api.test.mjs b/tests/member-api.test.mjs
+index 28c98e3..190f825 100644
+--- a/tests/member-api.test.mjs
++++ b/tests/member-api.test.mjs
+@@ -1,73 +1,12 @@
+-// Run against the local preview: RUN_MEMBER_API_TESTS=1 node --test tests/member-api.test.mjs
+-// Synthetic accounts are identified by test_run_<timestamp>; cleanup SQL is
+-// written into .sites-runtime after completion, never touching real accounts.
+-import test from "node:test";
+-import assert from "node:assert/strict";
+-import { writeFile } from "node:fs/promises";
+-
+-const origin = process.env.TEST_ORIGIN ?? "http://127.0.0.1:5173";
+-const run = `test_${Date.now()}`;
+-const names = [`${run}a`, `${run}b`];
+-const password = "local-test-password-123!";
+-async function call(path, method = "GET", body, cookie = "", extraHeaders = {}) {
+-  const response = await fetch(origin + path, { method, headers: { Origin: origin, "Content-Type": "application/json", Cookie: cookie, ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
+-  const text = await response.text();
+-  let data;
+-  try { data = JSON.parse(text); } catch { data = { error: text }; }
+-  return { status: response.status, data, cookie: response.headers.get("set-cookie"), cache: response.headers.get("cache-control") };
+-}
+-test("members: registration, isolation, profile, login, logout and authorization", { skip: process.env.RUN_MEMBER_API_TESTS !== "1" }, async () => {
+-  try {
+-    assert.equal((await call("/api/member")).data.member, null);
+-    assert.equal((await call("/api/draws")).status, 401);
+-    for (const role of ["高級牛馬", "摸魚大師", "畫餅充飢", "人生勝利組"]) {
+-      const guest = await call("/api/draws", "POST", { role, memberId: "forged" });
+-      assert.equal(guest.status, 201);
+-      assert.equal(guest.data.record.role, role);
+-      assert.equal(guest.data.record.saved, false);
+-    }
+-    assert.equal((await call("/api/draws", "POST", { role: "其他" })).status, 400);
+-    assert.equal((await call("/api/draws", "POST", { role: "高級牛馬" }, "", { Origin: "https://untrusted.example" })).status, 403);
+-    assert.equal((await call("/api/member/register", "POST", { username: names[0], password, displayName: "測試會員" }, "", { Origin: "https://untrusted.example" })).status, 403);
+-    assert.equal((await call("/api/member/register", "POST", { username: names[0], password: "short", displayName: "測試會員" })).status, 400);
+-    const a = await call("/api/member/register", "POST", { username: names[0], password, displayName: "測試會員甲", accessRole: "admin" });
+-    assert.equal(a.status, 201, JSON.stringify(a.data));
+-    assert.match(a.cookie, /HttpOnly/); assert.match(a.cookie, /SameSite=Lax/);
+-    assert.equal(a.cache, "no-store");
+-    const cookieA = a.cookie.split(";")[0];
+-    assert.equal((await call("/api/member/register", "POST", { username: names[0].toUpperCase(), password, displayName: "重複" })).status, 409);
+-    const profileA = (await call("/api/member", "GET", undefined, cookieA)).data.member;
+-    assert.equal(profileA.accessRole, "member");
+-    assert.equal(profileA.passwordHash, undefined);
+-    assert.equal((await call("/api/admin/members", "GET", undefined, cookieA)).status, 403);
+-    const b = await call("/api/member/register", "POST", { username: names[1], password, displayName: "測試會員乙" });
+-    assert.equal(b.status, 201);
+-    const cookieB = b.cookie.split(";")[0];
+-    const profileB = (await call("/api/member", "GET", undefined, cookieB)).data.member;
+-    const update = await call("/api/member", "PATCH", { displayName: "修改暱稱", phone: "0912345678", email: "test@example.com", accessRole: "admin", id: profileB.id }, cookieA);
+-    assert.equal(update.status, 200);
+-    assert.equal(update.data.member.accessRole, "member");
+-    assert.equal((await call("/api/member", "GET", undefined, cookieB)).data.member.displayName, "測試會員乙");
+-    const draw = await call("/api/draws", "POST", { role: "高級牛馬", memberId: profileB.id, memberName: "冒用" }, cookieA);
+-    assert.equal(draw.status, 201);
+-    assert.equal((await call(`/api/draws?memberId=${profileA.id}`, "GET", undefined, cookieB)).data.records.length, 0);
+-    const historyA = (await call("/api/draws", "GET", undefined, cookieA)).data;
+-    assert.equal(historyA.total, 1); assert.equal(historyA.favoriteRole, "高級牛馬");
+-    assert.equal((await call("/api/draws", "POST", { role: "其他" }, cookieA)).status, 400);
+-    assert.equal((await call("/api/member/login", "POST", { username: names[0], password: "wrong-password-123" })).status, 401);
+-    assert.equal((await call("/api/member/logout", "POST", undefined, cookieA)).status, 200);
+-    assert.equal((await call("/api/draws", "GET", undefined, cookieA)).status, 401);
+-    const login = await call("/api/member/login", "POST", { username: names[0], password });
+-    assert.equal(login.status, 200);
+-    const newCookie = login.cookie.split(";")[0];
+-    assert.notEqual(newCookie, cookieA);
+-    const saved = (await call("/api/member", "GET", undefined, newCookie)).data.member;
+-    assert.equal(saved.displayName, "修改暱稱"); assert.equal(saved.phone, "0912345678");
+-    assert.equal((await call("/api/draws", "GET", undefined, newCookie)).data.total, 1);
+-    for (let attempt = 0; attempt < 9; attempt++) await call("/api/member/login", "POST", { username: names[0], password: "wrong-password-123" });
+-    assert.equal((await call("/api/member/login", "POST", { username: names[0], password })).status, 429);
+-  } finally {
+-    const list = names.map(name => `'${name}'`).join(",");
+-    await writeFile(".sites-runtime/cleanup-member-tests.sql", `DELETE FROM reward_draws WHERE member_id IN (SELECT id FROM members WHERE username IN (${list}));\nDELETE FROM members WHERE username IN (${list});\n`);
+-  }
++// Optional, read-only checks against a running local preview. Password registration
++// was retired in favor of OTP; full isolated auth coverage lives in operations.test.mjs.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++const origin = process.env.TEST_ORIGIN ?? 'http://127.0.0.1:5173';
++test('legacy registration is retired and Guest cannot query protected records', { skip: process.env.RUN_MEMBER_API_TESTS !== '1' }, async () => {
++  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname), 'Use a local preview only');
++  const registration = await fetch(origin + '/api/member/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' });
++  assert.equal(registration.status, 410);
++  assert.equal((await fetch(origin + '/api/draws')).status, 401);
++  assert.equal((await fetch(origin + '/api/admin/members')).status, 401);
+ });
+diff --git a/tests/operations.test.mjs b/tests/operations.test.mjs
+new file mode 100644
+index 0000000..e3b8b98
+--- /dev/null
++++ b/tests/operations.test.mjs
+@@ -0,0 +1,115 @@
++import test, { after } from 'node:test';
++import assert from 'node:assert/strict';
++import { DatabaseSync } from 'node:sqlite';
++import { readFileSync, mkdirSync, rmSync } from 'node:fs';
++import { build } from 'esbuild';
++import { pathToFileURL } from 'node:url';
++
++// Real API handlers and SQL run against an isolated in-memory SQLite database.
++// The SMS transport is test-injected; production has no OTP bypass.
++const sql = new DatabaseSync(':memory:');
++sql.exec('PRAGMA foreign_keys = ON');
++for (const file of ['0000_salty_lilith.sql', '0001_previous_millenium_guard.sql']) sql.exec(readFileSync('drizzle/' + file, 'utf8'));
++sql.prepare("INSERT INTO members(id, username, display_name, phone, password_hash) VALUES ('legacy', 'legacy', 'Existing', '0912345678', '')").run();
++sql.exec(readFileSync('drizzle/0002_player_operations.sql', 'utf8'));
++const DB = {
++  prepare(query) {
++    let args = [];
++    return { bind(...values) { args = values; return this; },
++      async first() { return sql.prepare(query).get(...args) ?? null; },
++      async all() { return { results: sql.prepare(query).all(...args) }; },
++      async run() { return { meta: sql.prepare(query).run(...args) }; },
++      execute() { return { results: sql.prepare(query).all(...args) }; },
++    };
++  },
++  async batch(statements) { sql.exec('BEGIN'); try { const result = statements.map(s => s.execute()); sql.exec('COMMIT'); return result; } catch (error) { sql.exec('ROLLBACK'); throw error; } },
++};
++const sent = [];
++globalThis.__reworldTestEnv = { DB, OTP_SECRET: 'test-only-secret-with-at-least-32-characters', SMS: { async fetch(url, options) { sent.push(JSON.parse(options.body)); return new Response(null, { status: 204 }); } } };
++const directory = '.sites-runtime/operations-tests'; mkdirSync(directory, { recursive: true });
++const routes = {};
++for (const name of ['system', 'access', 'draws', 'member', 'member/login', 'member/register', 'member/logout', 'member/otp/send', 'member/otp/verify', 'player/history', 'admin/settings', 'admin/dashboard', 'admin/members', 'admin/member', 'admin/logs']) {
++  const output = `${directory}/${name.replaceAll('/', '-')}.mjs`;
++  await build({ entryPoints: [`app/api/${name}/route.ts`], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{ name: 'test-cloudflare', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'env', namespace: 'test' })); b.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const env = globalThis.__reworldTestEnv;' })); } }] });
++  routes[name] = await import(pathToFileURL(process.cwd() + '/' + output));
++}
++after(() => { sql.close(); rmSync(directory, { recursive: true, force: true }); delete globalThis.__reworldTestEnv; });
++let ip = 0;
++async function call(route, method = 'GET', body, cookie = '', origin = 'https://reworld.test') {
++  const [name] = route.split('?');
++  const response = await routes[name][method](new Request('https://reworld.test/api/' + route, { method, headers: { Origin: origin, 'Content-Type': 'application/json', Cookie: cookie, 'cf-connecting-ip': `test-ip-${ip++}` }, ...(body ? { body: JSON.stringify(body) } : {}) }));
++  return { status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
++}
++async function otp(phone) {
++  const send = await call('member/otp/send', 'POST', { phone }); assert.equal(send.status, 200, JSON.stringify(send.data));
++  return { phone, challengeId: send.data.challengeId, code: sent.at(-1).message.match(/\d{6}/)[0] };
++}
++let player, admin;
++test('Guest / Player / Admin flows, preservation, security and operational controls', async () => {
++  assert.equal(sql.prepare("SELECT display_name FROM members WHERE id = 'legacy'").get().display_name, 'Existing');
++  assert.equal((await call('system')).data.settings.door_pin, undefined);
++  assert.equal((await call('access', 'GET').catch(() => ({ status: 405 }))).status, 405);
++  assert.equal((await call('access', 'POST', {})).status, 403);
++  assert.equal((await call('admin/settings')).status, 401);
++  const missing = globalThis.__reworldTestEnv.SMS; delete globalThis.__reworldTestEnv.SMS;
++  assert.equal((await call('member/otp/send', 'POST', { phone: '0911111111' })).status, 503);
++  globalThis.__reworldTestEnv.SMS = missing;
++  assert.equal((await call('member/otp/send', 'POST', { phone: '123' })).status, 400);
++  const credentials = await otp('0912345678');
++  assert.equal((await call('member/otp/send', 'POST', { phone: credentials.phone })).status, 429);
++  assert.equal((await call('member/otp/verify', 'POST', { ...credentials, code: credentials.code === '000000' ? '111111' : '000000' })).status, 400);
++  const verified = await call('member/otp/verify', 'POST', credentials); assert.equal(verified.status, 200);
++  assert.match(verified.headers.get('set-cookie'), /HttpOnly.*SameSite=Lax.*Max-Age=7776000.*Secure/);
++  player = verified.cookie;
++  assert.equal((await call('member/otp/verify', 'POST', credentials)).status, 400);
++  const member = (await call('member', 'GET', undefined, player)).data.member;
++  assert.notEqual(member.id, 'legacy'); assert.equal(member.phoneVerified, 1); assert.match(member.playerId, /^RW-/);
++  assert.equal((await call('admin/settings', 'GET', undefined, player)).status, 403);
++  assert.equal((await call('member', 'PATCH', { displayName: 'PLAYER', phone: '0999999999' }, player)).data.member.phone, '+886912345678');
++  assert.equal((await call('player/history', 'POST', { type: 'class', value: '高級牛馬' }, player)).status, 201);
++  assert.equal((await call('player/history', 'GET', undefined, player)).data.history.length, 1);
++  assert.equal((await call('draws', 'POST', { role: '高級牛馬', memberId: 'legacy' }, player)).data.record.saved, true);
++  assert.equal((await call('draws', 'POST', { role: '摸魚大師' })).data.record.saved, false);
++  const adminCredentials = await otp('0922222222'); admin = (await call('member/otp/verify', 'POST', adminCredentials)).cookie;
++  const adminId = (await call('member', 'GET', undefined, admin)).data.member.id;
++  sql.prepare("UPDATE members SET access_role = 'admin' WHERE id = ?").run(adminId);
++  assert.equal((await call('admin/settings', 'PATCH', { door_access_enabled: true, door_pin: '827364' }, admin, 'https://evil.test')).status, 403);
++  assert.equal((await call('admin/settings', 'PATCH', { door_access_enabled: true, door_pin: '827364' }, admin)).status, 200);
++  const access = await call('access', 'POST', {}); assert.equal(access.data.pin, '827364'); assert.equal(access.data.seconds, 15); assert.equal(access.headers.get('cache-control'), 'no-store');
++  assert.equal((await call('access', 'POST', {}, player)).status, 200);
++  const accessLogs = (await call('admin/logs?type=access', 'GET', undefined, admin)).data.logs;
++  assert.ok(accessLogs.some(x => x.user_id === null && x.session_id)); assert.ok(accessLogs.some(x => x.user_id === member.id));
++  assert.ok(!JSON.stringify((await call('admin/settings', 'GET', undefined, admin)).data).includes('827364'));
++  assert.ok(!JSON.stringify((await call('admin/logs', 'GET', undefined, admin)).data).includes('827364'));
++  assert.ok(!JSON.stringify((await call('system')).data).includes('827364'));
++  assert.equal((await call('admin/settings', 'PATCH', { store_online: false, maintenance_message: 'PRIVATE EVENT' }, admin)).status, 200);
++  assert.equal((await call('access', 'POST', {})).data.error, 'SYSTEM OFFLINE');
++  assert.equal((await call('draws', 'POST', { role: '高級牛馬' })).status, 201);
++  await call('admin/settings', 'PATCH', { store_online: true, door_access_enabled: false, card_draw_enabled: false, registration_enabled: false }, admin);
++  assert.equal((await call('access', 'POST', {})).status, 403);
++  assert.equal((await call('draws', 'POST', { role: '高級牛馬' })).status, 403);
++  assert.equal((await call('member/otp/send', 'POST', { phone: '0933333333' })).status, 403);
++  sql.exec('DELETE FROM otp_limits');
++  const same = await otp('0912345678'); const login = await call('member/otp/verify', 'POST', same); assert.equal(login.status, 200);
++  assert.equal((await call('member', 'GET', undefined, login.cookie)).data.member.id, member.id);
++  assert.equal(sql.prepare('SELECT count(*) AS n FROM members WHERE phone_verified = 1 AND phone = ?').get('+886912345678').n, 1);
++  const found = await call('admin/members?q=0912345678', 'GET', undefined, admin);
++  assert.ok(found.data.members.some(x => x.id === 'legacy'));
++  assert.equal((await call('admin/member?id=' + member.id, 'GET', undefined, admin)).data.draws.length, 1);
++  const stats = (await call('admin/dashboard', 'GET', undefined, admin)).data.stats; assert.equal(stats.accessToday, 2); assert.equal(stats.drawsToday, 3);
++  await call('admin/member', 'PATCH', { id: member.id, status: 'suspended' }, admin);
++  assert.equal((await call('draws', 'GET', undefined, login.cookie)).status, 401);
++  assert.equal(sql.prepare('SELECT count(*) AS n FROM member_sessions WHERE member_id = ?').get(member.id).n, 0);
++  await call('admin/member', 'PATCH', { id: member.id, status: 'active' }, admin);
++  await call('admin/settings', 'PATCH', { door_access_enabled: true, door_pin: null, registration_enabled: true }, admin);
++  assert.equal((await call('access', 'POST', {})).status, 403);
++  assert.equal((await call('member/register', 'POST', {})).status, 410);
++  const bad = await otp('0944444444');
++  for (let i = 0; i < 5; i++) assert.equal((await call('member/otp/verify', 'POST', { ...bad, code: bad.code === '000000' ? '111111' : '000000' })).status, 400);
++  assert.equal((await call('member/otp/verify', 'POST', bad)).status, 400);
++  const expired = await otp('0955555555'); sql.prepare('UPDATE otp_challenges SET expires_at = 0 WHERE id = ?').run(expired.challengeId);
++  assert.equal((await call('member/otp/verify', 'POST', expired)).status, 400);
++  const concurrent = await otp('0966666666');
++  const attempts = await Promise.all([call('member/otp/verify', 'POST', concurrent), call('member/otp/verify', 'POST', concurrent)]);
++  assert.deepEqual(attempts.map(x => x.status).sort(), [200, 400]);
++});
+diff --git a/tests/rendered-html.test.mjs b/tests/rendered-html.test.mjs
+index 5392f9f..f683c23 100644
+--- a/tests/rendered-html.test.mjs
++++ b/tests/rendered-html.test.mjs
+@@ -1,33 +1,53 @@
+-import assert from "node:assert/strict";
+-import test from "node:test";
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { readdir, readFile } from 'node:fs/promises';
++import path from 'node:path';
++import { Miniflare } from 'miniflare';
+ 
+-const developmentPreviewMeta =
+-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
++async function modules(directory) {
++  const files = [];
++  for (const entry of await readdir(directory, { withFileTypes: true })) {
++    const filename = path.join(directory, entry.name);
++    if (entry.isDirectory()) files.push(...await modules(filename));
++    else if (entry.name.endsWith('.js')) files.push({ type: 'ESModule', path: filename });
++  }
++  return files;
++}
+ 
+-test("renders development preview metadata", async () => {
+-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+-  const { default: worker } = await import(workerUrl.href);
+-
+-  const response = await worker.fetch(
+-    new Request("http://localhost/", {
+-      headers: { accept: "text/html" },
+-    }),
+-    {
+-      ASSETS: {
+-        fetch: async () => new Response("Not found", { status: 404 }),
+-      },
+-    },
+-    {
+-      waitUntil() {},
+-      passThroughOnException() {},
+-    },
+-  );
+-
+-  assert.equal(response.status, 200);
+-  assert.match(
+-    response.headers.get("content-type") ?? "",
+-    /^text\/html\b/i,
+-  );
+-  assert.match(await response.text(), developmentPreviewMeta);
++test('built Worker renders Guest home and protects admin routes with real D1', async () => {
++  const server = path.resolve('dist/server');
++  const entrypoint = path.join(server, 'index.js');
++  const files = await modules(server);
++  const worker = new Miniflare({
++    modulesRoot: server,
++    modules: [{ type: 'ESModule', path: entrypoint }, ...files.filter(file => file.path !== entrypoint)],
++    compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'],
++    d1Databases: ['DB'], cf: false,
++    serviceBindings: { ASSETS: () => new Response('Not found', { status: 404 }) },
++  });
++  try {
++    const db = await worker.getD1Database('DB');
++    for (const file of ['0000_salty_lilith.sql', '0001_previous_millenium_guard.sql', '0002_player_operations.sql']) {
++      const sql = await readFile(path.join('drizzle', file), 'utf8');
++      const statements = sql.split('--> statement-breakpoint').map(value => value.trim()).filter(Boolean);
++      await db.batch(statements.map(statement => db.prepare(statement)));
++    }
++    const response = await worker.dispatchFetch('http://localhost/', { headers: { accept: 'text/html' } });
++    assert.equal(response.status, 200);
++    const html = await response.text();
++    assert.match(response.headers.get('content-type'), /^text\/html/);
++    assert.match(html, /ACCESS/); assert.match(html, /GUEST/);
++    assert.doesNotMatch(html, /scrypt-v1\$|code_hash|password_hash/);
++    const state = await worker.dispatchFetch('http://localhost/api/system');
++    assert.equal(state.status, 200);
++    const settings = await state.json();
++    assert.equal(settings.settings.door_access_enabled, 0);
++    assert.equal(settings.settings.door_pin, undefined);
++    const access = await worker.dispatchFetch('http://localhost/api/access', { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: '{}' });
++    assert.equal(access.status, 403);
++    assert.equal((await access.json()).error, 'ACCESS UNAVAILABLE');
++    assert.equal((await worker.dispatchFetch('http://localhost/api/admin/settings')).status, 401);
++    const admin = await worker.dispatchFetch('http://localhost/admin');
++    assert.match(await admin.text(), /ACCESS DENIED/);
++  } finally { await worker.dispose(); }
+ });
+diff --git a/tests/ui-components.test.mjs b/tests/ui-components.test.mjs
+index 3b46d8d..5229040 100644
+--- a/tests/ui-components.test.mjs
++++ b/tests/ui-components.test.mjs
+@@ -12,9 +12,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
+ const vite = await createServer({
+   appType: "custom",
+   configFile: false,
++  cacheDir: '.sites-runtime/ui-test-vite-cache',
+   root,
+   resolve: { alias: { "@": root } },
+-  server: { middlewareMode: true },
++  server: { middlewareMode: true, hmr: false, watch: null },
+ });
+ 
+ after(async () => {
+diff --git a/tsconfig.json b/tsconfig.json
+index 3a13f90..43aaa2f 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -1,7 +1,11 @@
+ {
+   "compilerOptions": {
+     "target": "ES2017",
+-    "lib": ["dom", "dom.iterable", "esnext"],
++    "lib": [
++      "dom",
++      "dom.iterable",
++      "esnext"
++    ],
+     "allowJs": true,
+     "skipLibCheck": true,
+     "strict": true,
+@@ -19,7 +23,9 @@
+       }
+     ],
+     "paths": {
+-      "@/*": ["./*"]
++      "@/*": [
++        "./*"
++      ]
+     }
+   },
+   "include": [
+@@ -30,5 +36,10 @@
+     ".next/dev/types/**/*.ts",
+     "**/*.mts"
+   ],
+-  "exclude": ["node_modules"]
++  "exclude": [
++    "node_modules",
++    "work",
++    ".sites-runtime",
++    "dist"
++  ]
+ }
