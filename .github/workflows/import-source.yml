@@ -1,20 +1,31 @@
-name: Prepare project files
+name: Sync validated Reworld update
 on: workflow_dispatch
 permissions:
   contents: write
+concurrency: reworld-source-sync
 jobs:
-  import:
+  sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-      - name: Verify and expand the approved source archive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Apply reviewed source update
         run: |
-          test ! -e package.json
-          echo '5aa8778e174e8d598bac485cc805c592a978ac6febd595c739df5e004d98cbaa  reworld-source.zip' | sha256sum -c -
-          unzip -q reworld-source.zip
-          git rm reworld-source.zip
+          echo '37727873bb86e190fb6f084661e6b3c002db0f92c0d6f48011088752fca6043a  reworld-update.patch' | sha256sum -c -
+          git apply --check reworld-update.patch
+          git apply --index reworld-update.patch
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Save verified source
+        run: |
+          git rm reworld-update.patch
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Expand validated reworld application source'
+          git commit -m 'Add Guest, Player, secure Access and operations dashboard'
           git push origin HEAD:main
