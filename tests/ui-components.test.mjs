@@ -12,9 +12,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const vite = await createServer({
   appType: "custom",
   configFile: false,
+  cacheDir: '.sites-runtime/ui-test-vite-cache',
   root,
   resolve: { alias: { "@": root } },
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false, watch: null },
 });
 
 after(async () => {

@@ -1,33 +1,53 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { Miniflare } from 'miniflare';
 
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
+async function modules(directory) {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await modules(filename));
+    else if (entry.name.endsWith('.js')) files.push({ type: 'ESModule', path: filename });
+  }
+  return files;
+}
 
-test("renders development preview metadata", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-
-  const response = await worker.fetch(
-    new Request("http://localhost/", {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
-  );
-
-  assert.equal(response.status, 200);
-  assert.match(
-    response.headers.get("content-type") ?? "",
-    /^text\/html\b/i,
-  );
-  assert.match(await response.text(), developmentPreviewMeta);
+test('built Worker renders Guest home and protects admin routes with real D1', async () => {
+  const server = path.resolve('dist/server');
+  const entrypoint = path.join(server, 'index.js');
+  const files = await modules(server);
+  const worker = new Miniflare({
+    modulesRoot: server,
+    modules: [{ type: 'ESModule', path: entrypoint }, ...files.filter(file => file.path !== entrypoint)],
+    compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'],
+    d1Databases: ['DB'], cf: false,
+    serviceBindings: { ASSETS: () => new Response('Not found', { status: 404 }) },
+  });
+  try {
+    const db = await worker.getD1Database('DB');
+    for (const file of ['0000_salty_lilith.sql', '0001_previous_millenium_guard.sql', '0002_player_operations.sql']) {
+      const sql = await readFile(path.join('drizzle', file), 'utf8');
+      const statements = sql.split('--> statement-breakpoint').map(value => value.trim()).filter(Boolean);
+      await db.batch(statements.map(statement => db.prepare(statement)));
+    }
+    const response = await worker.dispatchFetch('http://localhost/', { headers: { accept: 'text/html' } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(response.headers.get('content-type'), /^text\/html/);
+    assert.match(html, /ACCESS/); assert.match(html, /GUEST/);
+    assert.doesNotMatch(html, /scrypt-v1\$|code_hash|password_hash/);
+    const state = await worker.dispatchFetch('http://localhost/api/system');
+    assert.equal(state.status, 200);
+    const settings = await state.json();
+    assert.equal(settings.settings.door_access_enabled, 0);
+    assert.equal(settings.settings.door_pin, undefined);
+    const access = await worker.dispatchFetch('http://localhost/api/access', { method: 'POST', headers: { Origin: 'http://localhost', 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(access.status, 403);
+    assert.equal((await access.json()).error, 'ACCESS UNAVAILABLE');
+    assert.equal((await worker.dispatchFetch('http://localhost/api/admin/settings')).status, 401);
+    const admin = await worker.dispatchFetch('http://localhost/admin');
+    assert.match(await admin.text(), /ACCESS DENIED/);
+  } finally { await worker.dispose(); }
 });

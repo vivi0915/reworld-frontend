@@ -8,7 +8,8 @@ export async function PATCH(request: Request) {
     const body = await readBody(request);
     const member = await requireMember(request);
     const details = profile(body);
-    await database().prepare("UPDATE members SET display_name = ?, phone = ?, email = ? WHERE id = ?").bind(details.displayName, details.phone, details.email, member.id).run();
+    details.phone = member.phone;
+    await database().prepare("UPDATE members SET display_name = ?, email = ? WHERE id = ?").bind(details.displayName, details.email, member.id).run();
     return json({ member: { ...member, ...details } });
   } catch (error) { return apiError(error); }
 }

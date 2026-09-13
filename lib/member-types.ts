@@ -6,4 +6,8 @@ export type Member = {
   email: string;
   accessRole: "member" | "admin";
   createdAt: string;
+  playerId: string;
+  phoneVerified: number;
+  status: 'active' | 'suspended';
+  lastLoginAt: string | null;
 };

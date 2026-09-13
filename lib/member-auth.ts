@@ -4,8 +4,8 @@ import { scrypt, timingSafeEqual } from "node:crypto";
 import type { Member } from "./member-types";
 
 const COOKIE = "reworld_session";
-const SESSION_SECONDS = 7 * 24 * 60 * 60;
-export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt";
+const SESSION_SECONDS = 90 * 24 * 60 * 60;
+export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt, m.player_id AS playerId, m.phone_verified AS phoneVerified, m.status, m.last_login_at AS lastLoginAt";
 export function database() { return env.DB as D1Database; }
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -87,7 +87,9 @@ export function cookie(request: Request, token: string, maxAge = SESSION_SECONDS
 export async function currentMember(request: Request): Promise<Member | null> {
   const token = sessionToken(request);
   if (!token) return null;
-  return database().prepare(`SELECT ${memberColumns} FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token_hash = ? AND s.expires_at > ?`).bind(await digest(token), Date.now()).first<Member>();
+  const member = await database().prepare(`SELECT ${memberColumns} FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token_hash = ? AND s.expires_at > ?`).bind(await digest(token), Date.now()).first<Member>();
+  if (member?.status === 'suspended') throw new ApiError(403, 'PLAYER SUSPENDED');
+  return member;
 }
 export async function requireMember(request: Request) {
   const member = await currentMember(request);
@@ -97,10 +99,13 @@ export async function requireMember(request: Request) {
 export async function createSession(request: Request, memberId: string) {
   const token = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
   const db = database();
+  const active = await db.prepare("SELECT id FROM members WHERE id = ? AND status = 'active'").bind(memberId).first();
+  if (!active) throw new ApiError(403, 'PLAYER SUSPENDED');
   const old = sessionToken(request);
   const statements = [db.prepare("DELETE FROM member_sessions WHERE expires_at <= ?").bind(Date.now())];
   if (old) statements.push(db.prepare("DELETE FROM member_sessions WHERE token_hash = ?").bind(await digest(old)));
   statements.push(db.prepare("INSERT INTO member_sessions (token_hash, member_id, expires_at) VALUES (?, ?, ?)").bind(await digest(token), memberId, Date.now() + SESSION_SECONDS * 1000));
+  statements.push(db.prepare('UPDATE members SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').bind(memberId));
   await db.batch(statements);
   return cookie(request, token);
 }

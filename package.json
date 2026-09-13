@@ -10,10 +10,12 @@
     "build": "bash scripts/build-verified.sh",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint app components/member-panel.tsx components/menu-board.tsx lib db",
+    "lint": "eslint app components lib db tests --ignore-pattern components/ui",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
-    "deploy": "node scripts/configure-cloudflare.mjs && npm run build && wrangler d1 migrations apply DB --remote --config wrangler.jsonc && wrangler deploy --config dist/server/wrangler.json"
+    "deploy": "node scripts/configure-cloudflare.mjs && npm run build && wrangler d1 migrations apply DB --remote --config wrangler.jsonc && wrangler deploy --config dist/server/wrangler.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:api": "node --test tests/operations.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -58,7 +60,9 @@
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "4.92.0",
+    "miniflare": "4.20260515.0",
+    "esbuild": "0.28.0"
   },
   "type": "module"
 }

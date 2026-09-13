@@ -1,37 +1,32 @@
 # re:world
 
-手機優先的酒吧會員 App：註冊登入、會員資料、模擬門鎖、職業抽卡與冒險紀錄，以及四種屬性各三杯的擲骰子菜單。
+本儲存庫是 Reworld 後續開發的主要原始碼來源。請沿用 GitHub 分支與提交紀錄，優先透過 GitHub Actions 建置與測試，避免每次建立新的本機副本。
 
-## 部署架構
+目前正式前台：https://reworld-member-app.vivi56782003.chatgpt.site/
 
-GitHub 保存原始碼；Cloudflare Workers 執行完整網站與 API；Cloudflare D1 保存會員與抽卡紀錄。GitHub Pages 僅支援靜態內容，無法單獨執行此專案的登入與資料庫 API。
+目前正式後台：https://reworld-member-app.vivi56782003.chatgpt.site/admin
 
-此專案尚未綁定 Cloudflare 帳號。請勿將 Token、密碼、本機資料庫、會員名單或 `.env` 檔提交到 GitHub。
+正式網站目前由 Sites 託管。GitHub 提交不會自動更新這個網址；目前也沒有獨立測試站。這份公開儲存庫不包含正式會員資料、管理員密碼或私人帳號建立 migration。
 
-## 本機開發
+## 本階段功能
 
-使用 Node.js 24，執行 `npm ci`、`npm run db:local`、`npm run dev`。
-資料僅存於本機 `.wrangler`；新環境不會帶入舊站會員。
+Guest 可直接使用首頁、酒單、職業選擇、抽卡及符合營運條件時的 ACCESS。Player 保存 Player ID、選擇與抽卡紀錄。後台提供四個營運開關、維護訊息、會員搜尋及停權、統計、Door PIN 設定與操作紀錄。
 
-## 連接 GitHub 自動部署
+手機 OTP 程式與安全限制已實作，但尚無 SMS 供應商，因此正式簡訊註冊尚未啟用。既有帳密登入保留。Door PIN 尚未設定時保持空值、Access 停用。Reward/Claim 已保留資料結構，實際獎勵規則待定。詳見 [OPERATIONS.md](OPERATIONS.md)。
 
-1. 建立並登入 Cloudflare 帳號，建立 D1 資料庫 `reworld-members`。
-2. 在 GitHub 專案建立 `production` environment，將 Cloudflare API Token 與帳號 ID 填入 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。Token 僅授予目標帳號必要的 Workers 部署與 D1 權限。
-3. 在 repository Variables 填入 `REWORLD_D1_DATABASE_ID`，確認後將 `REWORLD_DEPLOY_ENABLED` 設為 `true`。
-4. 執行 Actions → Deploy reworld。流程會建置、套用資料表遷移，再發布到 Workers。
-5. 以 Cloudflare 實際回傳的 workers.dev 網址測試；設定完成前沒有可用的新網址。
+## 驗證
 
-也可在本機完成 `wrangler login` 後，設定 `REWORLD_D1_DATABASE_ID` 並執行 `npm run deploy`。
-不得覆写已套用的 drizzle migration；新增 schema 變更時使用 `npm run db:generate`。
+使用 Node.js 24：`npm ci`、`npm run typecheck`、`npm run lint`、`npm test`。測試使用隔離資料庫與測試 SMS，不會操作正式會員。GitHub Actions 在 push、PR 或手動執行時完成同樣檢查。
 
-## 管理員
+需要本機預覽才執行 `npm run db:local`、`npm run dev`。不需預覽時可不安裝 node_modules；請勿刪除未備份的 `.wrangler` 本機資料庫。
 
-新會員一律為一般會員；店家應先在新站註冊，再由維護者確認指定帳號後設定 admin 權限。這份原始碼不包含既有 viviadmin 帳號、密碼或登入憑證。
+## 選用 Cloudflare 自動部署
 
-## 驗證與限制
+部署流程預設停用，且與現有 Sites 正式站不同。設定前不會產生新網址或搬移會員資料。
 
-`npm run typecheck`、`npm run build`。會員 API 整合測試需先啟動本機預覽，再執行 `RUN_MEMBER_API_TESTS=1 node --test tests/member-api.test.mjs`；測試結束後執行產生的本機測試清理 SQL。
+1. 準備 Cloudflare Workers 帳號與 D1 資料庫。
+2. GitHub production environment 設定 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
+3. Repository Variables 設定真實 `REWORLD_D1_DATABASE_ID`，確認目標後設 `REWORLD_DEPLOY_ENABLED=true`。
+4. 手動執行 Deploy reworld，或 main 通過檢查後自動部署。
 
-門鎖為模擬；菜單酒名與價格待確認。新 Cloudflare 環境尚須檢查會員註冊、登入、抽卡與資料庫持久化，並確認帳號方案的執行時間限制能容納密碼雜湊。尚未包含 Email 驗證或密碼找回服務。
-
-部署參考：https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/
+新 D1 是空環境，不會自動擁有現有 viviadmin 帳號。正式資料搬移與網域切換必須另外安排。SMS 與 OTP secret 只在執行環境設定，禁止提交到 GitHub。

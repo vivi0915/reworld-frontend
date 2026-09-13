@@ -57,7 +57,28 @@ export default function HomePage() {
   const [tab, setTab] = useState<Tab>("home");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [unlocking, setUnlocking] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const [doorCode, setDoorCode] = useState<string | null>(null);
+  const unlocked = Boolean(doorCode);
+  const [system, setSystem] = useState<import('@/lib/operations').PublicSettings | null>(null);
+  const [accessMessage, setAccessMessage] = useState('');
+  const accessRequest = useRef<AbortController | null>(null);
+  const doorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => fetch('/api/system', { signal: controller.signal, cache: 'no-store' }).then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<{ settings: import('@/lib/operations').PublicSettings }>; }).then(data => { setSystem(data.settings); if (!data.settings.store_online || !data.settings.door_access_enabled) setDoorCode(null); }).catch(() => { if (!controller.signal.aborted) { setSystem(null); setDoorCode(null); } });
+    void refresh(); const timer = setInterval(refresh, 10000);
+    return () => { controller.abort(); clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    const clear = () => { accessRequest.current?.abort(); setDoorCode(null); if (doorTimer.current) clearTimeout(doorTimer.current); };
+    document.addEventListener('visibilitychange', clear);
+    return () => { document.removeEventListener('visibilitychange', clear); clear(); };
+  }, [tab]);
+  async function saveRole(value: Role) {
+    if (!member) return;
+    try { const response = await fetch('/api/player/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'class', value }) }); if (!response.ok) throw new Error(); }
+    catch { toast.error('角色已選擇，但紀錄暫時無法保存。'); }
+  }
   const [drawing, setDrawing] = useState(false);
   const [result, setResult] = useState<DrawRecord | null>(null);
   const [records, setRecords] = useState<DrawRecord[]>([]);
@@ -79,7 +100,7 @@ export default function HomePage() {
     const tick = () => {
       setLitRole(roles[step % roles.length].name);
       if (step === lastStep) {
-        setSelectedRole(roles[target].name);
+        setSelectedRole(roles[target].name); void saveRole(roles[target].name);
         setLitRole(null); setRandomizing(false); actionBusy.current = false;
         toast.success(`你的角色是：${roles[target].name}`);
         return;
@@ -142,12 +163,17 @@ export default function HomePage() {
 
   async function handleUnlock() {
     if (unlocking || unlocked) return;
-    setUnlocking(true);
-    await new Promise((resolve) => setTimeout(resolve, 1350));
-    setUnlocking(false);
-    setUnlocked(true);
-    toast.success("門鎖已解開，歡迎進入 re:world");
-    window.setTimeout(() => setUnlocked(false), 5000);
+    const controller = new AbortController(); accessRequest.current = controller;
+    setUnlocking(true); setAccessMessage('');
+    try {
+      const response = await fetch('/api/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: controller.signal });
+      const data = await response.json() as { error?: string; message?: string; pin: string; seconds: number };
+      if (!response.ok) throw new Error([data.error, data.message].filter(Boolean).join(' · '));
+      if (controller.signal.aborted || document.hidden) return;
+      setDoorCode(data.pin);
+      doorTimer.current = setTimeout(() => setDoorCode(null), data.seconds * 1000);
+    } catch (error) { if (!controller.signal.aborted) setAccessMessage((error as Error).message); }
+    finally { setUnlocking(false); }
   }
 
   async function drawReward() {
@@ -190,10 +216,11 @@ export default function HomePage() {
           <div className="brand" aria-label="re world">
             <span>re:</span>world
           </div>
-          <div className="system-status"><i /> ONLINE</div>
+          <div className="system-status">{system ? (system.store_online ? "SYSTEM ONLINE" : "SYSTEM OFFLINE") : "CONNECTING"}</div>
         </header>
 
         <div className="content">
+          {system && (!system.store_online || system.maintenance_message) && <div className="system-notice" role="status">{!system.store_online && <strong>SYSTEM OFFLINE<br />REWORLD IS CURRENTLY OFFLINE</strong>}<p>{system.maintenance_message}</p></div>}
           {tab === "home" && (
             <div className="screen home-screen">
               <div className="eyebrow">ACCESS TERMINAL · 01</div>
@@ -214,13 +241,14 @@ export default function HomePage() {
                 <span className="unlock-icon">
                   {unlocked ? <Unlock size={38} /> : <LogIn size={38} />}
                 </span>
-                <strong>{unlocking ? "驗證中" : unlocked ? "已解鎖" : "登入 re:world"}</strong>
+                <strong>{unlocking ? "CHECKING" : unlocked ? "ACCESS GRANTED" : "ACCESS"}</strong>
                 <small>{unlocking ? "SCANNING ACCESS" : unlocked ? "ACCESS GRANTED" : "TAP TO ACCESS"}</small>
               </button>
 
+              {doorCode && <div className="door-code" role="status"><span>DOOR CODE</span><strong>{doorCode}</strong><small>代碼將自動隱藏</small><button onClick={() => setDoorCode(null)}>HIDE CODE</button></div>}
+              {accessMessage && <p className="system-notice" role="alert">{accessMessage}</p>}
               <div className="connection-strip">
-                <div><span className="signal-dot" />門鎖模擬模式</div>
-                <span>尚未串接設備</span>
+                <div>{member ? 'PLAYER' : 'GUEST'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
               </div>
 
               <button className="mission-card" onClick={() => setTab("roles")}>
@@ -249,7 +277,7 @@ export default function HomePage() {
                     aria-pressed={selectedRole === name}
                     aria-label={name}
                     style={{ "--role-color": color } as React.CSSProperties}
-                    onClick={() => { setSelectedRole(name); setResult(null); }}
+                    onClick={() => { setSelectedRole(name); void saveRole(name); setResult(null); }}
                   >
                     <span className="role-code">{code}</span>
                     <span className="role-emblem"><Icon size={34} strokeWidth={1.7} /></span>
@@ -260,8 +288,9 @@ export default function HomePage() {
                 ))}
               </div>
 
+              {system && !system.card_draw_enabled && <p className="system-notice" role="status">CARD DRAW OFFLINE{system.maintenance_message && ` · ${system.maintenance_message}`}</p>}
               {!result ? (
-                <button className="primary-action" disabled={drawing || randomizing || !selectedRole} onClick={drawReward}>
+                <button className="primary-action" disabled={drawing || randomizing || !selectedRole || !system?.card_draw_enabled} onClick={drawReward}>
                   <Sparkles size={18} />
                   {drawing ? "正在抽取獎勵…" : randomizing ? "正在選擇角色…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇角色"}
                 </button>
@@ -282,14 +311,14 @@ export default function HomePage() {
           )}
 
           {tab === "menu" && <MenuBoard />}
-          {tab === "member" && <MemberPanel member={member} loading={memberLoading} error={memberError} onRefresh={refreshMember} />}
+          {tab === "member" && <MemberPanel registrationEnabled={Boolean(system?.registration_enabled)} member={member} loading={memberLoading} error={memberError} onRefresh={refreshMember} />}
           {tab === "history" && (
             <div className="screen history-screen">
               <div className="eyebrow">PLAYER LOG · 03</div>
               <h1>冒險紀錄</h1>
               <p className="screen-copy">每一次選擇，都會成為你的角色資料。</p>
 
-              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>登入／註冊</button></div> : <>
+              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>CREATE PLAYER ID</button></div> : <>
               <div className="stats-row">
                 <div><span>總抽取</span><strong>{totalDraws}</strong></div>
                 <div><span>主要角色</span><strong>{favoriteRole ?? "—"}</strong></div>
