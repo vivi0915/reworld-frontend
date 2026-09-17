@@ -1,0 +1,31 @@
+name: Apply verified Player upgrade
+on: workflow_dispatch
+permissions:
+  contents: write
+concurrency: reworld-source-sync
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Apply reviewed update
+        run: |
+          echo '311bbe4168fd3a27deab831b4405a2bab1267dc47ec39b80117442778ca05ad9  reworld-player-update.patch' | sha256sum -c -
+          git apply --check reworld-player-update.patch
+          git apply --index reworld-player-update.patch
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Save verified Player upgrade
+        run: |
+          git rm reworld-player-update.patch
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Separate Player creation from phone verification and protect reward claims'
+          git push origin HEAD:main
