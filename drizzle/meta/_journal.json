@@ -22,6 +22,13 @@
       "when": 1789265394151,
       "tag": "0002_player_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789513114974,
+      "tag": "0005_optional_phone_player",
+      "breakpoints": true
     }
   ]
 }

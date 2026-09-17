@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const members = sqliteTable("members", {
   id: text("id").primaryKey(),
   username: text("username").notNull(),
   displayName: text("display_name").notNull(),
-  phone: text("phone").notNull().default(""),
+  legacyContactPhone: text("legacy_contact_phone").notNull().default(""),
+  phone: text("phone"),
+  phoneVerifiedAt: text("phone_verified_at"),
   email: text("email").notNull().default(""),
   passwordHash: text("password_hash").notNull(),
   accessRole: text("access_role").notNull().default("member"),
@@ -14,7 +16,7 @@ export const members = sqliteTable("members", {
   phoneVerified: integer('phone_verified').notNull().default(0),
   status: text('status').notNull().default('active'),
   lastLoginAt: text('last_login_at'),
-}, (table) => [uniqueIndex("idx_members_username").on(table.username), uniqueIndex('idx_members_player_id').on(table.playerId), uniqueIndex('idx_members_verified_phone').on(table.phone).where(sql`${table.phoneVerified} = 1`)]);
+}, (table) => [uniqueIndex("idx_members_username").on(table.username), uniqueIndex('idx_members_player_id').on(table.playerId), uniqueIndex('idx_members_verified_phone').on(table.phone).where(sql`${table.phoneVerifiedAt} IS NOT NULL`)]);
 
 export const memberSessions = sqliteTable("member_sessions", {
   tokenHash: text("token_hash").primaryKey(),
@@ -71,13 +73,20 @@ export const guestDraws = sqliteTable('guest_draws', {
 }, t => [index('idx_guest_draws_time').on(t.createdAt)]);
 export const rewardClaims = sqliteTable('reward_claims', {
   id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => members.id), rewardKey: text('reward_key').notNull(),
-  status: text('status').notNull().default('unlocked'), createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`), claimedAt: text('claimed_at'),
-}, t => [check('claim_status', sql`${t.status} IN ('unlocked','claimed','expired')`)]);
+  status: text('status').notNull().default('available'), redeemedAt: text('redeemed_at'), createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`), claimedAt: text('claimed_at'),
+}, t => [check('claim_status', sql`${t.status} IN ('unlocked','available','claimed','redeemed','expired')`)]);
 export const otpChallenges = sqliteTable('otp_challenges', {
-  id: text('id').primaryKey(), phone: text('phone').notNull(), codeHash: text('code_hash').notNull(),
+  id: text('id').primaryKey(), userId: text('user_id').references(() => members.id), purpose: text('purpose').notNull().default('recover'), recoveryHash: text('recovery_hash'), phone: text('phone').notNull(), codeHash: text('code_hash').notNull(),
   expiresAt: integer('expires_at').notNull(), attempts: integer('attempts').notNull().default(0),
   consumed: integer('consumed').notNull().default(0), sent: integer('sent').notNull().default(0),
 }, t => [index('idx_otp_phone').on(t.phone, t.expiresAt)]);
 export const otpLimits = sqliteTable('otp_limits', {
   key: text('key').primaryKey(), attempts: integer('attempts').notNull(), expiresAt: integer('expires_at').notNull(),
 });
+
+export const rewardDefinitions = sqliteTable('reward_definitions', {
+  rewardKey: text('reward_key').primaryKey(), requiresPhoneVerification: integer('requires_phone_verification').notNull().default(1), oneTime: integer('one_time').notNull().default(1),
+}, t => [check('reward_requires_phone_boolean', sql`${t.requiresPhoneVerification} IN (0,1)`), check('reward_one_time_boolean', sql`${t.oneTime} IN (0,1)`)]);
+export const rewardClaimLocks = sqliteTable('reward_claim_locks', {
+  userId: text('user_id').notNull().references(() => members.id), rewardKey: text('reward_key').notNull(), claimId: text('claim_id').notNull(),
+}, t => [primaryKey({ columns: [t.userId, t.rewardKey] })]);

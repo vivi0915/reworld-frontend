@@ -4,7 +4,7 @@ export async function GET(request: Request) {
   try {
     const member = await requireMember(request);
     const { results } = await database().prepare('SELECT id, type, value, created_at FROM player_history WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(member.id).all();
-    const { results: claims } = await database().prepare('SELECT id, reward_key, status, created_at, claimed_at FROM reward_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(member.id).all();
+    const { results: claims } = await database().prepare('SELECT c.id, c.reward_key, c.status, c.created_at, c.claimed_at, c.redeemed_at, COALESCE(r.requires_phone_verification, 1) AS requires_phone_verification, r.reward_key IS NOT NULL AS claimable FROM reward_claims c LEFT JOIN reward_definitions r ON r.reward_key = c.reward_key WHERE c.user_id = ? ORDER BY c.created_at DESC LIMIT 100').bind(member.id).all();
     return json({ history: results, claims });
   } catch (error) { return apiError(error); }
 }

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     if (!member) throw new ApiError(404, 'PLAYER NOT FOUND');
     const history = await db.prepare('SELECT id, type, value, created_at FROM player_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
     const draws = await db.prepare('SELECT id, role, reward, used, created_at FROM reward_draws WHERE member_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
-    const claims = await db.prepare('SELECT id, reward_key, status, created_at, claimed_at FROM reward_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
+    const claims = await db.prepare('SELECT id, reward_key, status, created_at, claimed_at, redeemed_at FROM reward_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 100').bind(id).all();
     return json({ member, history: history.results, draws: draws.results, claims: claims.results });
   } catch (error) { return apiError(error); }
 }

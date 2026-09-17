@@ -1,15 +1,16 @@
-import { ApiError, apiError, database, json, readBody } from '@/lib/member-auth';
+import { ApiError, apiError, currentMember, database, json, readBody } from '@/lib/member-auth';
 import { normalizePhone, otpHash, otpSendLimit, smsConfiguration } from '@/lib/otp';
-import { settings } from '@/lib/operations';
 export async function POST(request: Request) {
   try {
     const body = await readBody(request);
     const phone = normalizePhone(body.phone);
+    const member = await currentMember(request);
+    const purpose = body.purpose;
+    if (purpose !== 'attach' && purpose !== 'recover') throw new ApiError(400, '請選擇驗證或恢復 PLAYER。');
+    if (purpose === 'attach' && !member) throw new ApiError(401, '請先建立 PLAYER。');
+    if (purpose === 'attach' && member?.phoneVerifiedAt) throw new ApiError(409, '此 PLAYER 已驗證手機。');
     const config = smsConfiguration();
-    const system = await settings();
-    const existing = await database().prepare('SELECT id FROM members WHERE phone = ? AND phone_verified = 1').bind(phone).first();
-    if (!system.registration_enabled && !existing) throw new ApiError(403, system.maintenance_message || 'REGISTRATION OFFLINE');
-    await otpSendLimit(request, phone);
+    await otpSendLimit(request, phone, member?.id);
     const id = crypto.randomUUID();
     // Rejection sampling avoids modulo bias.
     let number: number;
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
     const db = database();
     await db.batch([
       db.prepare('UPDATE otp_challenges SET consumed = 1 WHERE phone = ?').bind(phone),
-      db.prepare('INSERT INTO otp_challenges(id, phone, code_hash, expires_at) VALUES (?, ?, ?, ?)').bind(id, phone, await otpHash(id, phone, code, config.secret), Date.now() + 300000),
+      db.prepare('INSERT INTO otp_challenges(id, phone, code_hash, expires_at, user_id, purpose) VALUES (?, ?, ?, ?, ?, ?)').bind(id, phone, await otpHash(id, phone, code, config.secret), Date.now() + 300000, member?.id ?? null, purpose),
     ]);
     let delivered = false;
     try {

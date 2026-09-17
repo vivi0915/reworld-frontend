@@ -2,7 +2,7 @@
 
 ## Delivery and migrations
 
-The existing app, menu and class/draw visuals remain in place. `drizzle/0002_player_operations.sql` is an additive migration over 0000/0001, with a matching Drizzle snapshot and journal. It preserves existing members and draws, gives legacy accounts a Player ID, and leaves their phone numbers **unverified**. Never infer account ownership from a legacy contact phone. New verified phone accounts are unique; existing password accounts can still log in. New password registration is disabled.
+The existing app, menu and class/draw visuals remain in place. `drizzle/0002_player_operations.sql` is an additive migration over 0000/0001, with a matching Drizzle snapshot and journal. It preserves existing members and draws, gives legacy accounts a Player ID, and leaves their phone numbers **unverified**. Never infer account ownership from a legacy contact phone. Verified phone bindings are unique; existing password accounts can still log in. New password registration remains disabled. New device Players are created without a phone via POST /api/player/create.
 
 Apply migrations to a backed-up staging database before production. Sites packages migrations with the build. For other Worker deployments, apply the same migration files through that deployment's D1 migration process. Do not manually run 0002 twice or replace the production database. No live database migration was run by the local tests.
 
@@ -10,7 +10,7 @@ Initial settings: store online, draw enabled, registration enabled, door access 
 
 ## SMS integration still required
 
-There is deliberately no built-in SMS vendor or test-code login in production. With no SMS configuration, send/verify fail closed with a helpful Guest message. Set a Worker service binding `SMS` and a secret `OTP_SECRET` of at least 32 characters after selecting a vendor. The SMS adapter owns the vendor credentials and implements:
+There is deliberately no built-in SMS vendor or test-code login in production. With no SMS configuration, send/verify fail closed with a helpful message; device Player creation remains available. Set a Worker service binding `SMS` and a secret `OTP_SECRET` of at least 32 characters after selecting a vendor. The SMS adapter owns the vendor credentials and implements:
 
 - `POST https://sms.internal/send`
 - JSON `{ to: "+8869xxxxxxxx", message: "…", idempotencyKey: "challenge UUID" }`
@@ -29,7 +29,9 @@ The console includes four toggles, maintenance text, blank masked PIN replacemen
 
 ## Rewards
 
-Existing `reward_draws.used` and reward content remain intact. `reward_claims` supports unlocked/claimed/expired states for future member rewards. There is intentionally no automatic reward grant or claim endpoint until reward and redemption rules are defined. Guest pre-registration rewards are not automatically attached to a later account. Class selections made while logged in are saved; the original draw history remains in the history tab.
+Existing reward draws and their content remain intact. Reward definitions declare requires_phone_verification and one_time. POST /api/rewards/claim accepts only an existing server-issued claimId belonging to the authenticated member. No client can grant an entitlement or choose its verification policy. Unknown reward definitions fail closed. No live rewards are seeded, automatically granted or attached from Guest history; concrete campaigns and grant/redemption rules remain to be defined. Existing draw labels are game results, not issued member entitlements.
+
+A protected claim requires phone_verified_at. The transaction acquires a unique (user_id, reward_key) lock for one-time rewards before changing available/unlocked to claimed. That verified user identity remains stable because a phone cannot be rebound to a different Player; users must restore the original account. The lock survives claim expiration and preserves historical claimed records. Claims support available, legacy unlocked, claimed, redeemed and expired, with claimed_at and redeemed_at. The UI shows claim controls only for known definitions and available entitlements.
 
 ## Verification
 
@@ -39,3 +41,15 @@ Existing `reward_draws.used` and reward content remain intact. `reward_claims` s
 - `npm run build`
 
 The optional local HTTP contract test checks retired registration and protected records. Operational tests use isolated in-memory data; the built Worker smoke test uses disposable D1. No tests seed production accounts.
+
+## Optional phone upgrade (migration 0005)
+
+- GUEST has no member; PLAYER has a member and no phone_verified_at; VERIFIED PLAYER has phone_verified_at. The old phone_verified flag is retained for compatibility, not used as a separate account tier.
+- POST /api/player/create creates a random Player ID, NULL phone and a 90-day session without SMS, username input or password input. Existing authenticated requests are idempotent. Registration toggle and server rate limits still apply. Unverified device-only accounts are not guaranteed recoverable after cookie loss/logout; the UI explains this. Legacy password accounts retain their login.
+- OTP send declares attach or recover. Attach requires an authenticated unverified Player. Each challenge is bound to the current member (or NULL for signed-out recovery), its phone and purpose. Verification updates the same member, preserving histories and claims. Recovery never creates a member. Registration off blocks new Players, not verification or recovery of existing ones.
+- If proof reveals an existing phone owner, no account is merged or phone moved. The API returns a short-lived, one-use recovery proof; the UI explicitly asks CONTINUE WITH EXISTING PLAYER. The restore route binds that proof to its originating member and logs into the original identity. Proof expires with the OTP. Suspended identities cannot log in or evade suspension by relinking.
+- OTP limits include phone cooldown/hour, IP/hour, source member/hour and verification counters; no frontend OTP or test bypass exists. Actual SMS still requires a provider.
+- Migration 0005 avoids rebuilding members (and cascading away sessions) by retaining the old required contact column as legacy_contact_phone, adding the nullable canonical phone column and backfilling phone_verified_at for already verified accounts. This archive is never exposed by API. Unverified legacy contact numbers remain unverified. Member foreign keys, sessions, histories, claims and admin privileges are preserved. Outstanding pre-migration OTP challenges are invalidated. Reward claims are copied with all existing IDs/statuses/timestamps before replacing their table to extend allowed statuses.
+- GitHub skips private Sites migrations 0003/0004; they contain account maintenance data and must never be exported. Current work targets GitHub; the separate Sites deployment needs a coordinated migration journal before any later deployment. Use a backed-up staging database first.
+
+Acceptance coverage: isolated handlers exercise flows A–H, provider absence, registration-off verification/recovery, preserved account identity/history, private recovery, cross-account OTP rejection, attempt/expiry/replay, duplicate/concurrent claims, suspension and admin visibility. The built Worker test applies migrations to disposable real D1. No live SMS or production data is used.

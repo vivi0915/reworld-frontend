@@ -5,7 +5,7 @@ import type { Member } from "./member-types";
 
 const COOKIE = "reworld_session";
 const SESSION_SECONDS = 90 * 24 * 60 * 60;
-export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt, m.player_id AS playerId, m.phone_verified AS phoneVerified, m.status, m.last_login_at AS lastLoginAt";
+export const memberColumns = "m.id, m.username, m.display_name AS displayName, m.phone, m.email, m.access_role AS accessRole, m.created_at AS createdAt, m.player_id AS playerId, m.phone_verified AS phoneVerified, m.phone_verified_at AS phoneVerifiedAt, m.status, m.last_login_at AS lastLoginAt";
 export function database() { return env.DB as D1Database; }
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

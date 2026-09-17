@@ -10,9 +10,9 @@
 
 ## 本階段功能
 
-Guest 可直接使用首頁、酒單、職業選擇、抽卡及符合營運條件時的 ACCESS。Player 保存 Player ID、選擇與抽卡紀錄。後台提供四個營運開關、維護訊息、會員搜尋及停權、統計、Door PIN 設定與操作紀錄。
+Guest 可直接使用首頁、酒單、職業選擇、抽卡及符合營運條件時的 ACCESS。Player 不需手機即可建立，透過 90 天 Browser Session 保存 Player ID、選擇與抽卡紀錄；手機驗證為選用升級，用於跨裝置恢復與受保護 Reward。後台提供四個營運開關、維護訊息、會員搜尋及停權、統計、Door PIN 設定與操作紀錄。
 
-手機 OTP 程式與安全限制已實作，但尚無 SMS 供應商，因此正式簡訊註冊尚未啟用。既有帳密登入保留。Door PIN 尚未設定時保持空值、Access 停用。Reward/Claim 已保留資料結構，實際獎勵規則待定。詳見 [OPERATIONS.md](OPERATIONS.md)。
+手機 OTP 程式與安全限制已實作，但尚無 SMS 供應商，因此實際手機綁定／恢復仍待供應商設定；建立一般 Player 不受影響。既有帳密登入保留。Door PIN 尚未設定時保持空值、Access 停用。Reward/Claim 支援伺服器核發資格、手機驗證要求及一次性領取；實際活動與核發規則待定，未自動發放獎勵。詳見 [OPERATIONS.md](OPERATIONS.md)。
 
 ## 驗證
 
