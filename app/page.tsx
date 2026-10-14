@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -10,13 +11,11 @@ import {
   ChartPie,
   Crown,
   Shuffle,
-  LogIn,
   History,
   Home,
   Martini,
   Sparkles,
   Swords,
-  Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -212,8 +211,8 @@ export default function HomePage() {
           <button className="profile-button" aria-label="會員資料" onClick={() => setTab("member")}>
             <CircleUserRound size={21} />
           </button>
-          <div className="brand" aria-label="re world">
-            <span>re:</span>world
+          <div className="brand">
+            <Image src="/brand/reworld-logo.svg" alt="REWORLD" width={600} height={120} className="brand-logo" unoptimized priority />
           </div>
           <div className="system-status">{system ? (system.store_online ? "SYSTEM ONLINE" : "SYSTEM OFFLINE") : "CONNECTING"}</div>
         </header>
@@ -226,7 +225,7 @@ export default function HomePage() {
               <div className="welcome-row">
                 <div>
                   <p>{member ? `歡迎回來，${member.displayName}` : "歡迎來到 re:world"}</p>
-                  <h1>今晚，解鎖另一個你</h1>
+                  <h1>Enter Reworld, find your reward</h1>
                 </div>
                 <span className="level-chip">LV. 01</span>
               </div>
@@ -234,14 +233,16 @@ export default function HomePage() {
               <button
                 className={`unlock-core ${unlocking ? "is-scanning" : ""} ${unlocked ? "is-unlocked" : ""}`}
                 onClick={handleUnlock}
+                disabled={unlocking}
+                aria-busy={unlocking}
+                aria-label={unlocking ? "Checking access" : unlocked ? "Access granted" : "Tap to Access"}
                 aria-live="polite"
               >
                 <span className="unlock-rings" aria-hidden="true" />
-                <span className="unlock-icon">
-                  {unlocked ? <Unlock size={38} /> : <LogIn size={38} />}
+                <span className="unlock-icon" aria-hidden="true">
+                  <Image src="/brand/reworld-icon.svg" alt="" width={512} height={512} className="access-brand-icon" unoptimized priority />
                 </span>
-                <strong>{unlocking ? "CHECKING" : unlocked ? "ACCESS GRANTED" : "ACCESS"}</strong>
-                <small>{unlocking ? "SCANNING ACCESS" : unlocked ? "ACCESS GRANTED" : "TAP TO ACCESS"}</small>
+                <strong className="access-label">Tap to Access</strong>
               </button>
 
               {doorCode && <div className="door-code" role="status"><span>DOOR CODE</span><strong>{doorCode}</strong><small>代碼將自動隱藏</small><button onClick={() => setDoorCode(null)}>HIDE CODE</button></div>}
