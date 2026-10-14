@@ -106,7 +106,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
         <p>登入會員，記錄你的探索進度；集滿 12 杯，解鎖實體酒單。</p>
         <Button variant="outline" onClick={() => setLoginOpen(true)}>登入／註冊</Button>
       </> : <>
-        <small>{member.playerId} · 我的探索</small>
+        <small>{member.displayName || '玩家'} · 我的探索</small>
         <strong>{current ? `${current.completed} / 12 DISCOVERED` : '正在同步探索進度…'}</strong>
         {current && <progress max={12} value={current.completed} aria-label={`已探索 ${current.completed} 杯，共 12 杯`} />}
         <small>由店員確認後計入進度</small>
@@ -148,7 +148,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
       <MemberPanel key={member?.id || 'guest'} member={member} loading={memberLoading} error={memberError} registrationEnabled={registrationEnabled} onRefresh={async () => { await onRefresh(); setLoginOpen(false); }} />
     </DialogContent></Dialog>
     <Dialog open={voucherOpen && Boolean(allDone)} onOpenChange={setVoucherOpen}><DialogContent className="menu-dialog"><DialogTitle>實體酒單兌換券</DialogTitle><DialogDescription>已集滿十二杯，請向店員出示此頁；由店員核對後兌換一次實體酒單。</DialogDescription>
-      {current?.voucher ? <div className="menu-voucher"><Ticket size={32} /><strong>{current.voucher.redeemedAt ? '已兌換' : '可兌換 · WORLD COMPLETED'}</strong><span>{member?.playerId}</span><code>{current.voucher.code}</code><small>店員以後台即時紀錄為準，截圖不代表有效兌換。</small></div> : <p>兌換券正在同步，請稍後重新讀取進度。</p>}
+      {current?.voucher ? <div className="menu-voucher"><Ticket size={32} /><strong>{current.voucher.redeemedAt ? '已兌換' : '可兌換 · WORLD COMPLETED'}</strong><span>{member?.displayName || '玩家'}</span><code>{current.voucher.code}</code><small>店員以後台即時紀錄為準，截圖不代表有效兌換。</small></div> : <p>兌換券正在同步，請稍後重新讀取進度。</p>}
     </DialogContent></Dialog>
   </div>;
 }
