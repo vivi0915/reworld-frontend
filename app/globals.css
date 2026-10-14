@@ -606,3 +606,33 @@ button:focus-visible { outline: 2px solid #7fd6ff; outline-offset: 3px; }
 .admin-logs small, .admin-member small, .admin-logs time { font-size: 14px; color: #a4bacb; }
 @media (max-width: 700px) { .admin-stats, .admin-toggles { grid-template-columns: 1fr 1fr; } .admin-settings { grid-template-columns: 1fr; } .admin-header { align-items: flex-start; } }
 @media (max-width: 380px) { .admin-toggles { grid-template-columns: 1fr; } }
+
+/* Exploration lives on the original twelve cards; symbols supplement color. */
+.exploration-summary { display: grid; gap: 10px; margin-top: 20px; padding: 16px; border: 1px solid #315777; background: #0b1829; border-radius: 12px; }
+.exploration-summary p { margin: 0; line-height: 1.65; }
+.exploration-summary > strong { font-size: 1.3rem; letter-spacing: .04em; }
+.exploration-summary small { color: #adc1d6; overflow-wrap: anywhere; }
+.exploration-summary progress { width: 100%; height: 8px; accent-color: #16e0bc; }
+.world-completed { color: #8bffe8; }
+.menu-tile.exploration-locked, .menu-tile.exploration-revoked { background: #08101b; border-color: #39475a; color: #a4afbf; }
+.menu-tile.exploration-locked .tile-number, .menu-tile.exploration-revoked .tile-number { color: #8391a4; }
+.menu-tile.exploration-pending { border-color: #edb847; background: #282114; }
+.menu-tile.exploration-pending .tile-state { color: #ffda7d; }
+.menu-tile.exploration-completed { border-color: var(--tile-color); box-shadow: inset 0 0 12px color-mix(in srgb,var(--tile-color) 20%,transparent), 0 0 9px color-mix(in srgb,var(--tile-color) 32%,transparent); }
+.menu-tile.selected { outline: 2px solid #e9f4ff; outline-offset: 2px; z-index: 1; }
+.menu-tile strong { text-align: center; overflow-wrap: anywhere; line-height: 1.4; }
+.tile-state { display: flex; align-items: center; justify-content: center; gap: 2px; font-size: .65rem; white-space: nowrap; }
+.tile-state svg { flex-shrink: 0; }
+.menu-dice { display: flex; gap: 8px; }
+.menu-filter { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 12px; font-size: .9rem; }
+.menu-filter input { width: 20px; height: 20px; accent-color: #27b8ff; }
+.dice-note { display: block; margin-top: 10px; color: #a8bdd1; line-height: 1.6; }
+.menu-dialog { max-height: 85svh; overflow-y: auto; }
+.menu-dialog .screen { padding: 12px 0; }
+.menu-voucher { display: grid; gap: 14px; color: #b8ffed; }
+.menu-voucher code { overflow-wrap: anywhere; font-size: .9rem; }
+.admin-exploration-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 12px; }
+.admin-exploration-card { padding: 14px; border: 1px solid #34516a; border-top: 3px solid var(--tile-color); display: grid; gap: 8px; }
+.admin-exploration-card small { color: #adc1d6; }
+.admin-exploration-card button { white-space: normal; height: auto; min-height: 40px; }
+@media (max-width: 360px) { .tile-state { flex-direction: column; gap: 1px; } .board-center > small { font-size: .65rem; } }

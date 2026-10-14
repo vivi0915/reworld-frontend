@@ -121,7 +121,7 @@ export default function HomePage() {
       setMember(data.member); setMemberError("");
       setRecords([]); setResult(null); setTotalDraws(0); setFavoriteRole(null);
     } catch (error) {
-      setMemberError((error as Error).message);
+      if (revision === accountRevision.current) { setMember(null); setMemberError((error as Error).message); }
       throw error;
     } finally { setMemberLoading(false); }
   }, []);
@@ -310,7 +310,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {tab === "menu" && <MenuBoard />}
+          {tab === "menu" && <MenuBoard key={member?.id || "guest"} member={member} memberLoading={memberLoading} memberError={memberError} onRefresh={refreshMember} registrationEnabled={Boolean(system?.registration_enabled)} />}
           {tab === "member" && <MemberPanel registrationEnabled={Boolean(system?.registration_enabled)} member={member} loading={memberLoading} error={memberError} onRefresh={refreshMember} />}
           {tab === "history" && (
             <div className="screen history-screen">

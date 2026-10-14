@@ -29,6 +29,13 @@
       "when": 1789513114974,
       "tag": "0005_optional_phone_player",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791945600000,
+      "tag": "0006_menu_exploration",
+      "breakpoints": true
     }
   ]
 }

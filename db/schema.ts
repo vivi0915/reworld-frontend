@@ -90,3 +90,29 @@ export const rewardDefinitions = sqliteTable('reward_definitions', {
 export const rewardClaimLocks = sqliteTable('reward_claim_locks', {
   userId: text('user_id').notNull().references(() => members.id), rewardKey: text('reward_key').notNull(), claimId: text('claim_id').notNull(),
 }, t => [primaryKey({ columns: [t.userId, t.rewardKey] })]);
+
+export const menuExplorations = sqliteTable('menu_explorations', {
+  memberId: text('member_id').notNull().references(() => members.id),
+  drinkId: text('drink_id').notNull(),
+  status: text('status').notNull().default('pending'),
+  requestedAt: text('requested_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  confirmedAt: text('confirmed_at'), confirmedBy: text('confirmed_by').references(() => members.id),
+  revision: integer('revision').notNull().default(1), lastEventId: text('last_event_id'),
+}, t => [
+  primaryKey({ columns: [t.memberId,t.drinkId] }),
+  check('menu_drink_id', sql`${t.drinkId} IN ('role-01-drink-1','role-01-drink-2','role-01-drink-3','role-02-drink-1','role-02-drink-2','role-02-drink-3','role-04-drink-1','role-04-drink-2','role-04-drink-3','role-03-drink-1','role-03-drink-2','role-03-drink-3')`),
+  check('menu_status', sql`${t.status} IN ('pending','completed','revoked')`),
+  check('menu_confirmed', sql`${t.status} != 'completed' OR (${t.confirmedAt} IS NOT NULL AND ${t.confirmedBy} IS NOT NULL)`),
+]);
+export const menuExplorationEvents = sqliteTable('menu_exploration_events', {
+  id: text('id').primaryKey(), memberId: text('member_id').notNull().references(() => members.id),
+  drinkId: text('drink_id').notNull(), actorId: text('actor_id').notNull().references(() => members.id),
+  action: text('action').notNull(), reason: text('reason').notNull().default(''),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, t => [index('idx_menu_events_member').on(t.memberId,t.createdAt),check('menu_event_action',sql`${t.action} IN ('confirm','revoke')`)]);
+export const menuVouchers = sqliteTable('menu_vouchers', {
+  memberId: text('member_id').primaryKey().references(() => members.id),
+  code: text('code').notNull().unique(),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  redeemedAt: text('redeemed_at'), redeemedBy: text('redeemed_by').references(() => members.id),
+});
