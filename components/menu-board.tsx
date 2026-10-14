@@ -55,7 +55,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
     window.addEventListener('focus', update);
     document.addEventListener('visibilitychange', update);
     return () => {
-      controller.abort(); version.current++; clearInterval(poll);
+      controller.abort(); clearInterval(poll);
       window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', update);
       timers.current.forEach(clearTimeout);
     };

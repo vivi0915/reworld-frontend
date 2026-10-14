@@ -21,6 +21,8 @@ export function AdminExploration({ memberId, playerId }: { memberId: string; pla
   }, [memberId]);
   useEffect(() => {
     const current = new AbortController(); controller.current = current;
+    // Initial D1 synchronization: state is updated only after the fetch resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh(current.signal).catch(e => { if (!current.signal.aborted) setMessage(e.message); });
     return () => current.abort();
   }, [refresh]);

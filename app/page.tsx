@@ -127,7 +127,6 @@ export default function HomePage() {
   }, []);
   useEffect(() => {
     // Synchronize the initial session with the server; state updates follow the request.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshMember().catch(() => {});
   }, [refreshMember]);
 
