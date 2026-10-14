@@ -636,3 +636,12 @@ button:focus-visible { outline: 2px solid #7fd6ff; outline-offset: 3px; }
 .admin-exploration-card small { color: #adc1d6; }
 .admin-exploration-card button { white-space: normal; height: auto; min-height: 40px; }
 @media (max-width: 360px) { .tile-state { flex-direction: column; gap: 1px; } .board-center > small { font-size: .65rem; } }
+
+/* Original REWORLD wordmark and power icon, without PLAYER BAR. */
+.brand { width: 100%; min-width: 0; }
+.brand-logo { display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto; }
+.welcome-row h1 { font-size: clamp(1.55rem, 6.5vw, 1.9rem); line-height: 1.16; letter-spacing: -.035em; }
+.unlock-core .unlock-icon { margin-bottom: 8px; }
+.access-brand-icon { display: block; width: clamp(84px, 26vw, 110px); height: auto; }
+.unlock-core .access-label { font-size: 1rem; letter-spacing: .06em; font-weight: 650; }
+.unlock-core:disabled { cursor: wait; }
