@@ -36,7 +36,7 @@ test('built Worker renders Guest home and protects admin routes with real D1', a
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(response.headers.get('content-type'), /^text\/html/);
-    assert.match(html, /ACCESS/); assert.match(html, /GUEST/);
+    assert.match(html, /ACCESS/); assert.match(html, /非會員/);
     assert.doesNotMatch(html, /scrypt-v1\$|code_hash|password_hash/);
     const state = await worker.dispatchFetch('http://localhost/api/system');
     assert.equal(state.status, 200);
