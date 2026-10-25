@@ -35,7 +35,7 @@ test('exploration permissions, confirmation, revocation and one-time voucher on 
       const response=await worker.dispatchFetch('http://localhost/api/'+route,{method,headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie,'cf-connecting-ip':'test-'+ip++},...(body?{body:JSON.stringify(body)}:{})});
       return {status:response.status,data:await response.json(),cookie:response.headers.get('set-cookie')?.split(';')[0],headers:response.headers};
     }
-    const create=async()=>{ const r=await call('player/create','POST',{});assert.equal(r.status,201);return r.cookie; };
+    const create=async()=>{ const id=crypto.randomUUID(), token=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-',''); const hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex'); await db.prepare("INSERT INTO members(id,username,display_name,password_hash,player_id) VALUES(?,?,'Legacy fixture','',?)").bind(id,id,'RW-'+id).run();await db.prepare('INSERT INTO member_sessions VALUES(?,?,?)').bind(hash,id,Date.now()+86400000).run();return 'reworld_session='+token; };
     const cookie=await create(), other=await create(), staff=await create();
     const identity=async c=>(await call('member','GET',undefined,c)).data.member;
     const member=await identity(cookie), otherMember=await identity(other), admin=await identity(staff);

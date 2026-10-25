@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { CircleUserRound, LogOut } from 'lucide-react';
+import { CircleUserRound, LogOut, LogIn, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { Member } from '@/lib/member-types';
@@ -9,7 +9,7 @@ import type { Member } from '@/lib/member-types';
 type Claim = { id: string; reward_key: string; status: string; requires_phone_verification: number; claimable: number };
 type Result = { error?: string; code?: string; status?: string; challengeId?: string; expiresIn?: number; resendAfter?: number; restoreToken?: string };
 export function MemberPanel({ member, loading, error, onRefresh, registrationEnabled }: { member: Member | null; loading: boolean; error: string; onRefresh: () => Promise<void>; registrationEnabled: boolean }) {
-  const [mode, setMode] = useState<'none' | 'attach' | 'recover' | 'legacy'>('none');
+  const [mode, setMode] = useState<'none' | 'attach' | 'recover' | 'register' | 'legacy'>('none');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [phone, setPhone] = useState('');
@@ -45,9 +45,6 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
     setBusy(true); setMessage('');
     try { await action(); } catch (e) { setMessage((e as Error).message); } finally { setBusy(false); }
   }
-  async function create() {
-    await run(async () => { await request('/api/player/create'); await onRefresh(); select('none'); setMessage('PLAYER CREATED · 你可以直接開始使用，手機驗證可稍後進行。'); });
-  }
   async function send() {
     if (cooldown) return;
     const data = await request('/api/member/otp/send', { phone, purpose: mode });
@@ -73,25 +70,25 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
     await run(async () => { await request('/api/member/logout'); setHistory([]); setClaims([]); await onRefresh(); select('none'); setMessage('GUEST MODE'); });
   }
   return <div className="screen member-screen">
-    <div className="eyebrow">PLAYER ID · 05</div>
-    <h1>{member ? (member.phoneVerifiedAt ? 'VERIFIED PLAYER' : 'PLAYER ID') : 'CREATE PLAYER ID'}</h1>
-    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : 'GUEST 也能 ACCESS、看酒單與抽卡。免費建立 Player ID，不需要手機號碼。'}</p>
+    <div className="eyebrow">MEMBERS · 05</div>
+    <h1>{member ? '會員' : '會員註冊／登入'}</h1>
+    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : '非會員也能 ACCESS、看酒單與抽卡。會員請使用手機號碼完成驗證註冊。'}</p>
     {loading ? <p role="status">正在讀取玩家資料…</p> : error ? <div><p role="alert">{error}</p><Button onClick={() => void onRefresh().catch(() => {})}>重試</Button><Button disabled={busy} onClick={logout}>回到 GUEST</Button></div> : <>
       {member ? <>
-        <div className="member-card"><CircleUserRound size={32} /><div><strong>{member.displayName || '玩家'}</strong><span>{member.phoneVerifiedAt ? 'VERIFIED PLAYER' : 'PLAYER'}</span><small>{member.phone || '尚未綁定手機'}</small><small>{member.status.toUpperCase()}</small><details><summary>會員識別資料</summary><small>Player ID：{member.playerId}</small></details></div></div>
-        {!member.phoneVerifiedAt && mode === 'none' && <section className="member-form"><h2>VERIFY PLAYER</h2><p className="screen-copy">Secure your Player ID<br />Save progress across devices<br />Claim member rewards</p><p className="screen-copy">未驗證時，進度保存在此瀏覽器登入狀態中；登出或清除 Cookie 後可能無法找回。</p><Button disabled={busy} onClick={() => select('attach')}>VERIFY MOBILE</Button><Button variant="ghost" disabled={busy} onClick={() => setMessage('NOT NOW · 你可以繼續使用一般 PLAYER 功能。')}>NOT NOW</Button></section>}
+        <div className="member-card"><CircleUserRound size={32} /><div><strong>{member.displayName || '玩家'}</strong><span>{member.phoneVerifiedAt ? '會員 · 手機已驗證' : '原有帳號 · 待綁定手機'}</span><small>{member.phone || '尚未綁定手機'}</small><small>{member.status.toUpperCase()}</small><details><summary>會員識別資料</summary><small>Player ID：{member.playerId}</small></details></div></div>
+        {!member.phoneVerifiedAt && mode === 'none' && <section className="member-form"><h2>綁定手機</h2><p className="screen-copy">Secure your Player ID<br />Save progress across devices<br />Claim member rewards</p><p className="screen-copy">原有帳號與紀錄保留。請綁定手機以使用會員驗證及找回功能。</p><Button disabled={busy} onClick={() => select('attach')}>VERIFY MOBILE</Button><Button variant="ghost" disabled={busy} onClick={() => setMessage('NOT NOW · 你可以繼續使用一般 PLAYER 功能。')}>NOT NOW</Button></section>}
         <h2>CLASS HISTORY</h2>
         {history.length ? history.map(item => <article className="directory-entry" key={item.id}><strong>{item.value}</strong><small>{item.created_at}</small></article>) : <p className="screen-copy">尚無角色選擇紀錄。</p>}
         <h2>REWARD / CLAIM</h2>
         {claims.length ? claims.map(item => <article className="directory-entry" key={item.id}><strong>{item.reward_key}</strong><span>{item.status.toUpperCase()}</span>{item.claimable === 1 && ['available', 'unlocked'].includes(item.status) && <Button disabled={busy} onClick={() => void claim(item)}>{item.requires_phone_verification && !member.phoneVerifiedAt ? 'VERIFY PLAYER TO CLAIM' : 'CLAIM REWARD'}</Button>}</article>) : <p className="screen-copy">尚無會員限定 Reward。抽卡獎勵可至冒險紀錄查看。</p>}
       </> : <>
         {!registrationEnabled && <p className="system-notice">REGISTRATION OFFLINE · 已有 PLAYER 仍可登入。</p>}
-        <Button className="primary-action" disabled={busy || !registrationEnabled} onClick={create}>CREATE PLAYER ID</Button>
-        <p className="screen-copy">手機驗證可稍後進行；先在目前裝置保存冒險。</p>
-        <Button variant="outline" disabled={busy} onClick={() => select('recover')}>RESTORE PLAYER · 手機登入／找回</Button>
-        <Button variant="ghost" disabled={busy} onClick={() => select('legacy')}>原有帳號登入</Button>
+        <Button className="primary-action" disabled={busy || !registrationEnabled} onClick={() => select('register')}><Smartphone aria-hidden="true" />手機註冊會員</Button>
+        <p className="screen-copy">不想註冊也可以繼續以非會員身分體驗。</p>
+        <Button variant="outline" disabled={busy} onClick={() => select('recover')}>手機登入／找回會員</Button>
+        <Button className="legacy-login-action" variant="outline" disabled={busy} onClick={() => select('legacy')}><LogIn size={24} aria-hidden="true" /><span>原有帳號登入</span></Button>
       </>}
-      {mode !== 'none' && <section className="member-form"><h2>{mode === 'attach' ? 'VERIFY MOBILE' : mode === 'recover' ? 'RESTORE PLAYER' : 'LOGIN'}</h2>
+      {mode !== 'none' && <section className="member-form"><h2>{mode === 'attach' ? 'VERIFY MOBILE' : mode === 'recover' ? '手機登入／找回' : mode === 'register' ? '手機註冊會員' : '原有帳號登入'}</h2>
         {restoreToken ? <><p>PLAYER ALREADY EXISTS</p><p className="screen-copy">此手機已綁定另一個 Player ID。繼續將登入原本帳號；目前 Player 的紀錄不會合併。</p><Button disabled={busy || !remaining} onClick={restore}>CONTINUE WITH EXISTING PLAYER</Button>{!remaining && <p>恢復憑證已過期，請重新發送驗證碼。</p>}</> : <form className="member-form" onSubmit={submit}>
           {mode === 'legacy' ? <><label>原有帳號<Input name="username" required autoComplete="username" disabled={busy} /></label><label>密碼<Input name="password" type="password" required autoComplete="current-password" disabled={busy} /></label></> : <>
             <label>PHONE NUMBER<Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || Boolean(challenge)} placeholder="09xxxxxxxx" autoComplete="tel" required /></label>

@@ -48,8 +48,11 @@ test('built Worker renders Guest home and protects admin routes with real D1', a
     assert.equal((await access.json()).error, 'ACCESS UNAVAILABLE');
     assert.equal((await worker.dispatchFetch('http://localhost/api/admin/settings')).status, 401);
     const created = await worker.dispatchFetch('http://localhost/api/player/create', { method:'POST', headers:{Origin:'http://localhost','Content-Type':'application/json'},body:'{}' });
-    assert.equal(created.status,201);
-    const cookie = created.headers.get('set-cookie').split(';')[0];
+    assert.equal(created.status,410);
+    const id=crypto.randomUUID(), token=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-',''); const hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');
+    await db.prepare("INSERT INTO members(id,username,display_name,password_hash,player_id) VALUES(?,?,'Legacy fixture','',?)").bind(id,id,'RW-'+id).run();
+    await db.prepare('INSERT INTO member_sessions VALUES(?,?,?)').bind(hash,id,Date.now()+86400000).run();
+    const cookie='reworld_session='+token;
     const identity = await worker.dispatchFetch('http://localhost/api/member',{headers:{Cookie:cookie}});
     const player = (await identity.json()).member;
     assert.equal(player.phone,null); assert.equal(player.phoneVerifiedAt,null);

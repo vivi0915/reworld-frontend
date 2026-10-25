@@ -18,8 +18,13 @@ export async function POST(request: Request) {
       // Unique phone index resolves simultaneous claims; no account merging.
       await db.prepare("UPDATE OR IGNORE members SET phone = ?, phone_verified = 1, phone_verified_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND phone_verified_at IS NULL").bind(phone, current.id).run();
     }
+    if (challenge.purpose === 'register') {
+      if (current) throw new ApiError(409, '請使用目前帳號綁定手機。');
+      const id = crypto.randomUUID();
+      await db.prepare("INSERT INTO members(id, username, display_name, phone, password_hash, player_id, phone_verified, phone_verified_at) SELECT ?, ?, '會員', ?, '', ?, 1, CURRENT_TIMESTAMP FROM system_settings WHERE id = 1 AND registration_enabled = 1 ON CONFLICT DO NOTHING").bind(id, 'phone_' + id, phone, 'RW-' + id.replaceAll('-', '').toUpperCase()).run();
+    }
     const owner = await db.prepare('SELECT id, status FROM members WHERE phone = ? AND phone_verified_at IS NOT NULL').bind(phone).first<{ id: string; status: string }>();
-    if (!owner) throw new ApiError(404, 'PLAYER NOT FOUND · 請先建立 PLAYER，再綁定手機。');
+    if (!owner) throw new ApiError(404, '找不到會員，請使用手機註冊；若註冊已關閉，請稍後再試。');
     if (owner.status !== 'active') throw new ApiError(403, 'PLAYER SUSPENDED');
     if (current && owner.id !== current.id) {
       // Explicit confirmation before switching accounts. Proof expires with OTP.

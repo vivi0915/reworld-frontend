@@ -53,3 +53,6 @@ The optional local HTTP contract test checks retired registration and protected 
 - GitHub skips private Sites migrations 0003/0004; they contain account maintenance data and must never be exported. Current work targets GitHub; the separate Sites deployment needs a coordinated migration journal before any later deployment. Use a backed-up staging database first.
 
 Acceptance coverage: isolated handlers exercise flows A–H, provider absence, registration-off verification/recovery, preserved account identity/history, private recovery, cross-account OTP rejection, attempt/expiry/replay, duplicate/concurrent claims, suspension and admin visibility. The built Worker test applies migrations to disposable real D1. No live SMS or production data is used.
+
+## Current membership policy
+New device-only Player creation is retired (410). New members must complete phone OTP using the register purpose; the registration toggle is checked at send and account creation. Recovery and legacy password login remain available. Existing accounts/history are preserved, with unverified accounts prompted to bind a phone. SMS credentials are still required for actual delivery. Bottom navigation is fixed to the viewport with safe-area content spacing.

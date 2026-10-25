@@ -43,10 +43,9 @@ async function call(route, method = 'GET', body, cookie = '', origin = 'https://
   const response = await routes[name][method](new Request('https://reworld.test/api/' + route, { method, headers: { Origin: origin, 'Content-Type': 'application/json', Cookie: cookie, 'cf-connecting-ip': fixedIp ?? `test-ip-${ip++}` }, ...(body ? { body: JSON.stringify(body) } : {}) }));
   return { status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
 }
-async function create() {
-  const response = await call('player/create', 'POST', {});
-  assert.equal(response.status, 201, JSON.stringify(response.data));
-  return response.cookie;
+async function create() { const id=crypto.randomUUID(), token=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-',''); const hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');
+ sql.prepare("INSERT INTO members(id,username,display_name,password_hash,player_id) VALUES(?,?,'Legacy fixture','',?)").run(id,id,'RW-'+id);
+ sql.prepare('INSERT INTO member_sessions VALUES(?,?,?)').run(hash,id,Date.now()+86400000);return 'reworld_session='+token;
 }
 async function otp(phone, cookie = '', purpose = cookie ? 'attach' : 'recover') {
   const send = await call('member/otp/send', 'POST', { phone, purpose }, cookie);
@@ -65,12 +64,12 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   const migrated = sql.prepare("SELECT * FROM members WHERE id='verified-existing'").get();
   assert.equal(migrated.password_hash,'preserved-password-hash'); assert.equal(migrated.access_role,'admin'); assert.equal(migrated.phone,'+886988888888'); assert.ok(migrated.phone_verified_at);
   assert.equal((await call('admin/settings')).status, 401);
-  assert.equal((await call('player/create', 'POST', {}, '', 'https://evil.test')).status, 403);
+  assert.equal((await call('player/create', 'POST', {}, '', 'https://evil.test')).status, 410);
   const sms = globalThis.__reworldTestEnv.SMS; delete globalThis.__reworldTestEnv.SMS;
   let player = await create();
   const before = await member(player);
   assert.equal(before.phone, null); assert.equal(before.phoneVerifiedAt, null); assert.equal(before.phoneVerified, 0); assert.match(before.playerId, /^RW-/);
-  assert.equal((await call('player/create', 'POST', {}, player)).status, 200);
+  assert.equal((await call('player/create', 'POST', {}, player)).status, 410);
   assert.equal((await member(player)).id, before.id);
   assert.equal((await call('member/otp/send', 'POST', {phone:'0912345678', purpose:'attach'}, player)).status, 503);
   assert.equal((await call('player/history', 'POST', {type:'class',value:'高級牛馬'}, player)).status, 201);
@@ -123,7 +122,7 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   await call('admin/settings','PATCH',{store_online:false,registration_enabled:false},admin);
   const unverified=await member(admin);assert.equal(unverified.phoneVerifiedAt,null);
   for(const cookie of ['',admin,player]) assert.equal((await call('access','POST',{},cookie)).status,403);
-  assert.equal((await call('player/create','POST',{})).status,403);
+  assert.equal((await call('player/create','POST',{})).status,410);
   sql.exec('DELETE FROM otp_limits');const recovery=await otp('0912345678');const login=await call('member/otp/verify','POST',recovery);assert.equal(login.status,200);assert.equal((await member(login.cookie)).id,before.id);
   assert.equal((await call('player/history','GET',undefined,login.cookie)).data.claims.find(c=>c.id==='menu-a').status,'claimed');
   const newPhone=await otp('0922222222');assert.equal((await call('member/otp/verify','POST',newPhone)).status,404);
@@ -148,7 +147,19 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   const limitPlayer=await create();
   for(let i=0;i<10;i++) assert.equal((await call('member/otp/send','POST',{phone:'09700000'+String(i).padStart(2,'0'),purpose:'attach'},limitPlayer)).status,200);
   assert.equal((await call('member/otp/send','POST',{phone:'0970000010',purpose:'attach'},limitPlayer)).status,429);
-  for(let i=0;i<10;i++) assert.equal((await call('player/create','POST',{},'', 'https://reworld.test','fixed-create-ip')).status,201);
-  assert.equal((await call('player/create','POST',{},'', 'https://reworld.test','fixed-create-ip')).status,429);
+  for(let i=0;i<10;i++) assert.equal((await call('player/create','POST',{},'', 'https://reworld.test','fixed-create-ip')).status,410);
+  assert.equal((await call('player/create','POST',{},'', 'https://reworld.test','fixed-create-ip')).status,410);
   sql.exec('DELETE FROM otp_limits');const race=await otp('0912345678');const races=await Promise.all([call('member/otp/verify','POST',race),call('member/otp/verify','POST',race)]);assert.deepEqual(races.map(r=>r.status).sort(),[200,400]);
+});
+
+test('new members require verified mobile and registration switch is enforced', async()=>{
+ sql.exec('DELETE FROM otp_limits; UPDATE system_settings SET registration_enabled=1');
+ const count=()=>sql.prepare('SELECT count(*) n FROM members').get().n;
+ const before=count(); assert.equal((await call('player/create','POST',{})).status,410);assert.equal(count(),before);
+ const proof=await otp('0981234567','','register');assert.equal(count(),before);
+ const verified=await call('member/otp/verify','POST',proof);assert.equal(verified.status,200);const identity=await member(verified.cookie);assert.ok(identity.phoneVerifiedAt);assert.equal(identity.phone,'+886981234567');assert.equal(count(),before+1);
+ sql.exec('DELETE FROM otp_limits');const duplicate=await otp('0981234567','','register');const again=await call('member/otp/verify','POST',duplicate);assert.equal((await member(again.cookie)).id,identity.id);assert.equal(count(),before+1);
+ const pending=await otp('0981234568','','register');sql.exec('UPDATE system_settings SET registration_enabled=0');assert.equal((await call('member/otp/verify','POST',pending)).status,404);assert.equal(count(),before+1);
+ assert.equal((await call('member/otp/send','POST',{phone:'0981234569',purpose:'register'})).status,403);
+ sql.exec('DELETE FROM otp_limits');const recovery=await otp('0981234567');assert.equal((await call('member/otp/verify','POST',recovery)).status,200);
 });

@@ -6,9 +6,14 @@ export async function POST(request: Request) {
     const phone = normalizePhone(body.phone);
     const member = await currentMember(request);
     const purpose = body.purpose;
-    if (purpose !== 'attach' && purpose !== 'recover') throw new ApiError(400, '請選擇驗證或恢復 PLAYER。');
+    if (purpose !== 'attach' && purpose !== 'recover' && purpose !== 'register') throw new ApiError(400, '請選擇驗證或恢復 PLAYER。');
     if (purpose === 'attach' && !member) throw new ApiError(401, '請先建立 PLAYER。');
     if (purpose === 'attach' && member?.phoneVerifiedAt) throw new ApiError(409, '此 PLAYER 已驗證手機。');
+    if (purpose === 'register') {
+      if (member) throw new ApiError(409, '請使用目前帳號綁定手機。');
+      const system = await database().prepare('SELECT registration_enabled FROM system_settings WHERE id = 1').first<{registration_enabled:number}>();
+      if (!system?.registration_enabled) throw new ApiError(403, 'REGISTRATION OFFLINE');
+    }
     const config = smsConfiguration();
     await otpSendLimit(request, phone, member?.id);
     const id = crypto.randomUUID();

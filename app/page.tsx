@@ -248,7 +248,7 @@ export default function HomePage() {
               {doorCode && <div className="door-code" role="status"><span>DOOR CODE</span><strong>{doorCode}</strong><small>代碼將自動隱藏</small><button onClick={() => setDoorCode(null)}>HIDE CODE</button></div>}
               {accessMessage && <p className="system-notice" role="alert">{accessMessage}</p>}
               <div className="connection-strip">
-                <div>{member ? 'PLAYER' : 'GUEST'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
+                <div>{member ? '會員' : '非會員'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
               </div>
 
               <button className="mission-card" onClick={() => setTab("roles")}>
@@ -318,7 +318,7 @@ export default function HomePage() {
               <h1>冒險紀錄</h1>
               <p className="screen-copy">每一次選擇，都會成為你的角色資料。</p>
 
-              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>CREATE PLAYER ID</button></div> : <>
+              {!member ? <div className="empty-state"><History size={28} /><strong>登入後查看你的冒險紀錄</strong><button className="primary-action" onClick={() => setTab("member")}>手機註冊／會員登入</button></div> : <>
               <div className="stats-row">
                 <div><span>總抽取</span><strong>{totalDraws}</strong></div>
                 <div><span>主要角色</span><strong>{favoriteRole ?? "—"}</strong></div>
