@@ -72,7 +72,7 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
   return <div className="screen member-screen">
     <div className="eyebrow">MEMBERS · 05</div>
     <h1>{member ? '會員' : '會員註冊／登入'}</h1>
-    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : '非會員也能 ACCESS、看酒單與抽卡。會員請使用手機號碼完成驗證註冊。'}</p>
+    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : 'GUEST也能 ACCESS、看酒單與抽卡。會員請使用手機號碼完成驗證註冊。'}</p>
     {loading ? <p role="status">正在讀取玩家資料…</p> : error ? <div><p role="alert">{error}</p><Button onClick={() => void onRefresh().catch(() => {})}>重試</Button><Button disabled={busy} onClick={logout}>回到 GUEST</Button></div> : <>
       {member ? <>
         <div className="member-card"><CircleUserRound size={32} /><div><strong>{member.displayName || '玩家'}</strong><span>{member.phoneVerifiedAt ? '會員 · 手機已驗證' : '原有帳號 · 待綁定手機'}</span><small>{member.phone || '尚未綁定手機'}</small><small>{member.status.toUpperCase()}</small><details><summary>會員識別資料</summary><small>Player ID：{member.playerId}</small></details></div></div>
@@ -84,7 +84,7 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
       </> : <>
         {!registrationEnabled && <p className="system-notice">REGISTRATION OFFLINE · 已有 PLAYER 仍可登入。</p>}
         <Button className="primary-action" disabled={busy || !registrationEnabled} onClick={() => select('register')}><Smartphone aria-hidden="true" />手機註冊會員</Button>
-        <p className="screen-copy">不想註冊也可以繼續以非會員身分體驗。</p>
+        <p className="screen-copy">不想註冊也可以繼續以GUEST身分體驗。</p>
         <Button variant="outline" disabled={busy} onClick={() => select('recover')}>手機登入／找回會員</Button>
         <Button className="legacy-login-action" variant="outline" disabled={busy} onClick={() => select('legacy')}><LogIn size={24} aria-hidden="true" /><span>原有帳號登入</span></Button>
       </>}

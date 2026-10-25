@@ -248,7 +248,7 @@ export default function HomePage() {
               {doorCode && <div className="door-code" role="status"><span>DOOR CODE</span><strong>{doorCode}</strong><small>代碼將自動隱藏</small><button onClick={() => setDoorCode(null)}>HIDE CODE</button></div>}
               {accessMessage && <p className="system-notice" role="alert">{accessMessage}</p>}
               <div className="connection-strip">
-                <div>{member ? '會員' : '非會員'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
+                <div>{member ? '會員' : 'GUEST'} ACCESS</div><span>在門鎖輸入 DOOR CODE</span>
               </div>
 
               <button className="mission-card" onClick={() => setTab("roles")}>

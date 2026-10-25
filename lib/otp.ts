@@ -5,7 +5,7 @@ import { ApiError, database, digest } from './member-auth';
 type SmsEnvironment = { SMS?: Fetcher; OTP_SECRET?: string };
 export function smsConfiguration() {
   const config = env as unknown as SmsEnvironment;
-  if (!config.SMS || !config.OTP_SECRET || config.OTP_SECRET.length < 32) throw new ApiError(503, '手機驗證暫時無法使用，請稍後再試，或先以非會員身分體驗。');
+  if (!config.SMS || !config.OTP_SECRET || config.OTP_SECRET.length < 32) throw new ApiError(503, '手機驗證暫時無法使用，請稍後再試，或先以GUEST身分體驗。');
   return { sms: config.SMS, secret: config.OTP_SECRET };
 }
 export function normalizePhone(value: unknown) {
