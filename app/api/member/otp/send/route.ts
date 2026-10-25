@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const code = String(number % 1000000).padStart(6, '0');
     const db = database();
     await db.batch([
-      db.prepare('UPDATE otp_challenges SET consumed = 1 WHERE phone = ?').bind(phone),
+      db.prepare('UPDATE otp_challenges SET consumed = 1, recovery_hash = NULL WHERE phone = ?').bind(phone),
       db.prepare('INSERT INTO otp_challenges(id, phone, code_hash, expires_at, user_id, purpose) VALUES (?, ?, ?, ?, ?, ?)').bind(id, phone, await otpHash(id, phone, code, config.secret), Date.now() + 300000, member?.id ?? null, purpose),
     ]);
     let delivered = false;

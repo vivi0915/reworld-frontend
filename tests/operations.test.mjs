@@ -31,7 +31,7 @@ const sent = [];
 globalThis.__reworldTestEnv = { DB, OTP_SECRET: 'test-only-secret-with-at-least-32-characters', SMS: { async fetch(url, options) { sent.push(JSON.parse(options.body)); return new Response(null, { status: 204 }); } } };
 const directory = '.sites-runtime/operations-tests'; mkdirSync(directory, { recursive: true });
 const routes = {};
-for (const name of ['system', 'access', 'draws', 'member', 'member/login', 'member/register', 'member/logout', 'member/otp/send', 'member/otp/verify', 'member/otp/restore', 'player/create', 'rewards/claim', 'player/history', 'admin/settings', 'admin/dashboard', 'admin/members', 'admin/member', 'admin/logs']) {
+for (const name of ['system', 'access', 'draws', 'member', 'member/login', 'member/password', 'member/register', 'member/logout', 'member/otp/send', 'member/otp/verify', 'member/otp/restore', 'player/create', 'rewards/claim', 'player/history', 'admin/settings', 'admin/dashboard', 'admin/members', 'admin/member', 'admin/logs']) {
   const output = `${directory}/${name.replaceAll('/', '-')}.mjs`;
   await build({ entryPoints: [`app/api/${name}/route.ts`], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{ name: 'test-cloudflare', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'env', namespace: 'test' })); b.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const env = globalThis.__reworldTestEnv;' })); } }] });
   routes[name] = await import(pathToFileURL(process.cwd() + '/' + output));
@@ -52,6 +52,7 @@ async function otp(phone, cookie = '', purpose = cookie ? 'attach' : 'recover') 
   assert.equal(send.status, 200, JSON.stringify(send.data));
   return { phone, challengeId: send.data.challengeId, code: sent.at(-1).message.match(/\d{6}/)[0] };
 }
+async function finish(proof, secret = 'test-password-123') { return call('member/password','POST',{challengeId:proof.challengeId,setupToken:proof.setupToken,password:secret,confirmPassword:secret}); }
 const member = async cookie => (await call('member', 'GET', undefined, cookie)).data.member;
 const grant = (id, user, key) => sql.prepare("INSERT INTO reward_claims(id,user_id,reward_key) VALUES(?,?,?)").run(id, user, key);
 test('Guest → Player → Verified Player, recovery, rewards and existing operations', async () => {
@@ -123,7 +124,7 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   const unverified=await member(admin);assert.equal(unverified.phoneVerifiedAt,null);
   for(const cookie of ['',admin,player]) assert.equal((await call('access','POST',{},cookie)).status,403);
   assert.equal((await call('player/create','POST',{})).status,410);
-  sql.exec('DELETE FROM otp_limits');const recovery=await otp('0912345678');const login=await call('member/otp/verify','POST',recovery);assert.equal(login.status,200);assert.equal((await member(login.cookie)).id,before.id);
+  sql.exec('DELETE FROM otp_limits');const recovery=await otp('0912345678');const resetProof=await call('member/otp/verify','POST',recovery);assert.equal(resetProof.cookie,undefined);const login=await finish(resetProof.data);assert.equal(login.status,200);assert.equal((await member(login.cookie)).id,before.id);
   assert.equal((await call('player/history','GET',undefined,login.cookie)).data.claims.find(c=>c.id==='menu-a').status,'claimed');
   const newPhone=await otp('0922222222');assert.equal((await call('member/otp/verify','POST',newPhone)).status,404);
   assert.equal(sql.prepare("SELECT count(*) n FROM members WHERE phone='+886922222222'").get().n,0);
@@ -131,7 +132,7 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   const adminProof=await otp('0933333333',admin);assert.equal((await call('member/otp/verify','POST',adminProof,admin)).status,200);
   const activeAdmin=(await call('member/otp/verify','POST',adminProof,admin));assert.equal(activeAdmin.status,400);
   // Continue using an independent valid admin session for operation checks.
-  sql.exec('DELETE FROM otp_limits');const adminRecovery=await otp('0933333333');const adminLogin=(await call('member/otp/verify','POST',adminRecovery)).cookie;
+  sql.exec('DELETE FROM otp_limits');const adminRecovery=await otp('0933333333');const adminLogin=(await finish((await call('member/otp/verify','POST',adminRecovery)).data)).cookie;
   const found=await call('admin/members?q=0912345678','GET',undefined,adminLogin);assert.ok(found.data.members.some(m=>m.id===before.id));
   const detail=await call('admin/member?id='+before.id,'GET',undefined,adminLogin);assert.equal(detail.data.member.phoneVerifiedAt,verified.phoneVerifiedAt);assert.equal(detail.data.draws.length,1);assert.ok(detail.data.claims.some(c=>c.id==='menu-a'));
   for(const route of ['system','admin/settings','admin/logs']) assert.ok(!JSON.stringify((await call(route,'GET',undefined,adminLogin)).data).includes('827364'));
@@ -152,14 +153,27 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   sql.exec('DELETE FROM otp_limits');const race=await otp('0912345678');const races=await Promise.all([call('member/otp/verify','POST',race),call('member/otp/verify','POST',race)]);assert.deepEqual(races.map(r=>r.status).sort(),[200,400]);
 });
 
-test('new members require verified mobile and registration switch is enforced', async()=>{
+test('phone registration requires OTP then password; password login and reset preserve identity', async()=>{
  sql.exec('DELETE FROM otp_limits; UPDATE system_settings SET registration_enabled=1');
  const count=()=>sql.prepare('SELECT count(*) n FROM members').get().n;
  const before=count(); assert.equal((await call('player/create','POST',{})).status,410);assert.equal(count(),before);
+ assert.equal((await finish({challengeId:'fake',setupToken:'x'.repeat(72)})).status,400);
  const proof=await otp('0981234567','','register');assert.equal(count(),before);
- const verified=await call('member/otp/verify','POST',proof);assert.equal(verified.status,200);const identity=await member(verified.cookie);assert.ok(identity.phoneVerifiedAt);assert.equal(identity.phone,'+886981234567');assert.equal(count(),before+1);
- sql.exec('DELETE FROM otp_limits');const duplicate=await otp('0981234567','','register');const again=await call('member/otp/verify','POST',duplicate);assert.equal((await member(again.cookie)).id,identity.id);assert.equal(count(),before+1);
- const pending=await otp('0981234568','','register');sql.exec('UPDATE system_settings SET registration_enabled=0');assert.equal((await call('member/otp/verify','POST',pending)).status,404);assert.equal(count(),before+1);
+ const verified=await call('member/otp/verify','POST',proof);assert.equal(verified.status,200);assert.equal(verified.cookie,undefined);assert.equal(count(),before);
+ assert.equal((await finish(verified.data,'short')).status,400);
+ assert.equal((await call('member/password','POST',{...verified.data,password:'test-password-123',confirmPassword:'different-password'})).status,400);
+ const completed=await finish(verified.data);assert.equal(completed.status,200);
+ const identity=await member(completed.cookie);assert.ok(identity.phoneVerifiedAt);assert.equal(identity.phone,'+886981234567');assert.equal(count(),before+1);
+ assert.equal((await finish(verified.data)).status,400);
+ assert.equal((await call('member/login','POST',{phone:'0981234567',password:'wrong-password'})).status,401);
+ for(const phone of ['0981234567','+886981234567']) {const login=await call('member/login','POST',{phone,password:'test-password-123'});assert.equal(login.status,200);assert.equal((await member(login.cookie)).id,identity.id);}
+ sql.exec('DELETE FROM otp_limits');const duplicate=await otp('0981234567','','register');assert.equal((await call('member/otp/verify','POST',duplicate)).status,409);assert.equal(count(),before+1);
+ const pending=await otp('0981234568','','register');const pendingProof=await call('member/otp/verify','POST',pending);sql.exec('UPDATE system_settings SET registration_enabled=0');assert.equal((await finish(pendingProof.data)).status,409);assert.equal(count(),before+1);
  assert.equal((await call('member/otp/send','POST',{phone:'0981234569',purpose:'register'})).status,403);
- sql.exec('DELETE FROM otp_limits');const recovery=await otp('0981234567');assert.equal((await call('member/otp/verify','POST',recovery)).status,200);
+ sql.exec('DELETE FROM otp_limits');const recovery=await otp('0981234567');const reset=await call('member/otp/verify','POST',recovery);assert.equal(reset.status,200);assert.equal(reset.cookie,undefined);
+ assert.equal((await finish(reset.data,'new-password-456')).status,200);assert.equal(await member(completed.cookie),null);
+ assert.equal((await call('member/login','POST',{phone:'0981234567',password:'test-password-123'})).status,401);
+ const login=await call('member/login','POST',{phone:'0981234567',password:'new-password-456'});assert.equal((await member(login.cookie)).id,identity.id);
+ sql.exec('DELETE FROM otp_limits');const expiry=await call('member/otp/verify','POST',await otp('0981234567'));sql.prepare('UPDATE otp_challenges SET expires_at=0 WHERE id=?').run(expiry.data.challengeId);assert.equal((await finish(expiry.data)).status,400);
+ sql.exec('DELETE FROM otp_limits');const concurrent=await call('member/otp/verify','POST',await otp('0981234567'));const results=await Promise.all([finish(concurrent.data),finish(concurrent.data)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
 });

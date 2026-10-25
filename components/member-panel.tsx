@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input';
 import type { Member } from '@/lib/member-types';
 
 type Claim = { id: string; reward_key: string; status: string; requires_phone_verification: number; claimable: number };
-type Result = { error?: string; code?: string; status?: string; challengeId?: string; expiresIn?: number; resendAfter?: number; restoreToken?: string };
+type Result = { error?: string; code?: string; status?: string; challengeId?: string; expiresIn?: number; resendAfter?: number; setupToken?: string; restoreToken?: string };
 export function MemberPanel({ member, loading, error, onRefresh, registrationEnabled }: { member: Member | null; loading: boolean; error: string; onRefresh: () => Promise<void>; registrationEnabled: boolean }) {
-  const [mode, setMode] = useState<'none' | 'attach' | 'recover' | 'register' | 'legacy'>('none');
+  const [mode, setMode] = useState<'none' | 'attach' | 'recover' | 'register' | 'legacy' | 'login'>('none');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [phone, setPhone] = useState('');
   const [challenge, setChallenge] = useState('');
+  const [setupToken, setSetupToken] = useState('');
   const [restoreToken, setRestoreToken] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [expires, setExpires] = useState(0);
@@ -30,7 +31,7 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
     fetch('/api/player/history', { signal: controller.signal }).then(async r => { if (!r.ok) throw new Error('無法讀取玩家紀錄。'); return r.json() as Promise<{ history: typeof history; claims: Claim[] }>; }).then(data => { setHistory(data.history); setClaims(data.claims); }).catch(e => { if (!controller.signal.aborted) setMessage(e.message); });
     return () => controller.abort();
   }, [member]);
-  function select(next: typeof mode) { setMode(next); setChallenge(''); setRestoreToken(''); setMessage(''); }
+  function select(next: typeof mode) { setMode(next); setSetupToken(''); setChallenge(''); setRestoreToken(''); setMessage(''); }
   async function request(path: string, data: Record<string, unknown> = {}) {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     const result = await r.json() as Result;
@@ -54,8 +55,13 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.currentTarget));
     await run(async () => {
-      if (mode !== 'legacy' && !challenge) { await send(); return; }
-      const data = await request(mode === 'legacy' ? '/api/member/login' : '/api/member/otp/verify', mode === 'legacy' ? form : { phone, challengeId: challenge, code: form.code });
+      if (setupToken) {
+        await request('/api/member/password', { ...form, setupToken, challengeId: challenge });
+        await onRefresh(); select('none'); setMessage('密碼設定完成。'); return;
+      }
+      if (mode !== 'legacy' && mode !== 'login' && !challenge) { await send(); return; }
+      const data = await request(mode === 'legacy' || mode === 'login' ? '/api/member/login' : '/api/member/otp/verify', mode === 'legacy' || mode === 'login' ? form : { phone, challengeId: challenge, code: form.code });
+      if (data.setupToken) { setSetupToken(data.setupToken); setMessage(data.status!); return; }
       await onRefresh(); select('none'); setMessage(data.status || 'LOGIN SUCCESS');
     });
   }
@@ -72,7 +78,7 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
   return <div className="screen member-screen">
     <div className="eyebrow">MEMBERS · 05</div>
     <h1>{member ? '會員' : '會員註冊／登入'}</h1>
-    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : 'GUEST也能 ACCESS、看酒單與抽卡。會員請使用手機號碼完成驗證註冊。'}</p>
+    <p className="screen-copy">{member ? '保存你的角色、冒險與 Reward。' : 'GUEST也能 ACCESS、看酒單與抽卡。會員註冊：輸入手機號碼 → 簡訊驗證 → 設定密碼。之後使用手機號碼與密碼登入。'}</p>
     {loading ? <p role="status">正在讀取玩家資料…</p> : error ? <div><p role="alert">{error}</p><Button onClick={() => void onRefresh().catch(() => {})}>重試</Button><Button disabled={busy} onClick={logout}>回到 GUEST</Button></div> : <>
       {member ? <>
         <div className="member-card"><CircleUserRound size={32} /><div><strong>{member.displayName || '玩家'}</strong><span>{member.phoneVerifiedAt ? '會員 · 手機已驗證' : '原有帳號 · 待綁定手機'}</span><small>{member.phone || '尚未綁定手機'}</small><small>{member.status.toUpperCase()}</small><details><summary>會員識別資料</summary><small>Player ID：{member.playerId}</small></details></div></div>
@@ -85,16 +91,17 @@ export function MemberPanel({ member, loading, error, onRefresh, registrationEna
         {!registrationEnabled && <p className="system-notice">REGISTRATION OFFLINE · 已有 PLAYER 仍可登入。</p>}
         <Button className="primary-action" disabled={busy || !registrationEnabled} onClick={() => select('register')}><Smartphone aria-hidden="true" />手機註冊會員</Button>
         <p className="screen-copy">不想註冊也可以繼續以GUEST身分體驗。</p>
-        <Button variant="outline" disabled={busy} onClick={() => select('recover')}>手機登入／找回會員</Button>
+        <Button variant="outline" disabled={busy} onClick={() => select('login')}><LogIn aria-hidden="true" />手機號碼登入</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => select('recover')}>忘記密碼／首次設定密碼</Button>
         <Button className="legacy-login-action" variant="outline" disabled={busy} onClick={() => select('legacy')}><LogIn size={24} aria-hidden="true" /><span>原有帳號登入</span></Button>
       </>}
-      {mode !== 'none' && <section className="member-form"><h2>{mode === 'attach' ? 'VERIFY MOBILE' : mode === 'recover' ? '手機登入／找回' : mode === 'register' ? '手機註冊會員' : '原有帳號登入'}</h2>
+      {mode !== 'none' && <section className="member-form"><h2>{mode === 'attach' ? 'VERIFY MOBILE' : setupToken ? '設定密碼' : mode === 'login' ? '手機號碼登入' : mode === 'recover' ? '簡訊驗證／重設密碼' : mode === 'register' ? '手機註冊會員' : '原有帳號登入'}</h2>
         {restoreToken ? <><p>PLAYER ALREADY EXISTS</p><p className="screen-copy">此手機已綁定另一個 Player ID。繼續將登入原本帳號；目前 Player 的紀錄不會合併。</p><Button disabled={busy || !remaining} onClick={restore}>CONTINUE WITH EXISTING PLAYER</Button>{!remaining && <p>恢復憑證已過期，請重新發送驗證碼。</p>}</> : <form className="member-form" onSubmit={submit}>
-          {mode === 'legacy' ? <><label>原有帳號<Input name="username" required autoComplete="username" disabled={busy} /></label><label>密碼<Input name="password" type="password" required autoComplete="current-password" disabled={busy} /></label></> : <>
+          {setupToken ? <><label>設定密碼（8–128 字元）<Input name="password" type="password" minLength={8} maxLength={128} autoComplete="new-password" required disabled={busy} /></label><label>再次輸入密碼<Input name="confirmPassword" type="password" minLength={8} maxLength={128} autoComplete="new-password" required disabled={busy} /></label></> : mode === 'login' ? <><label>手機號碼<Input name="phone" type="tel" placeholder="09xxxxxxxx" autoComplete="username" required disabled={busy} /></label><label>密碼<Input name="password" type="password" autoComplete="current-password" required disabled={busy} /></label></> : mode === 'legacy' ? <><label>原有帳號<Input name="username" required autoComplete="username" disabled={busy} /></label><label>密碼<Input name="password" type="password" required autoComplete="current-password" disabled={busy} /></label></> : <>
             <label>PHONE NUMBER<Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || Boolean(challenge)} placeholder="09xxxxxxxx" autoComplete="tel" required /></label>
             {challenge && <><label>SMS OTP<Input key={challenge} name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" placeholder="六位數驗證碼" required disabled={busy} /></label><small>{remaining > 0 ? `驗證碼有效時間：${remaining} 秒` : '驗證碼已過期，請重新發送。'}</small><Button type="button" variant="outline" disabled={busy || cooldown > 0} onClick={() => void run(send)}>{cooldown ? `${cooldown} 秒後可重送` : 'RESEND OTP'}</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setChallenge('')}>修改手機號碼</Button></>}
           </>}
-          <Button type="submit" className="primary-action" disabled={busy || (mode !== 'legacy' && Boolean(challenge) && !remaining)}>{busy ? '處理中…' : mode === 'legacy' ? 'LOGIN' : challenge ? 'VERIFY IDENTITY' : 'SEND OTP'}</Button>
+          <Button type="submit" className="primary-action" disabled={busy || (!setupToken && mode !== 'legacy' && mode !== 'login' && Boolean(challenge) && !remaining)}>{busy ? '處理中…' : setupToken ? '確認設定密碼' : mode === 'legacy' || mode === 'login' ? '登入' : challenge ? '驗證手機' : '取得驗證碼'}</Button>
         </form>}
         <Button variant="ghost" disabled={busy} onClick={() => select('none')}>{member ? 'NOT NOW' : 'BACK'}</Button>
       </section>}

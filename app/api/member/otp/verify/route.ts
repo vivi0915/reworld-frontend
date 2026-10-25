@@ -18,10 +18,15 @@ export async function POST(request: Request) {
       // Unique phone index resolves simultaneous claims; no account merging.
       await db.prepare("UPDATE OR IGNORE members SET phone = ?, phone_verified = 1, phone_verified_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND phone_verified_at IS NULL").bind(phone, current.id).run();
     }
-    if (challenge.purpose === 'register') {
-      if (current) throw new ApiError(409, '請使用目前帳號綁定手機。');
-      const id = crypto.randomUUID();
-      await db.prepare("INSERT INTO members(id, username, display_name, phone, password_hash, player_id, phone_verified, phone_verified_at) SELECT ?, ?, '會員', ?, '', ?, 1, CURRENT_TIMESTAMP FROM system_settings WHERE id = 1 AND registration_enabled = 1 ON CONFLICT DO NOTHING").bind(id, 'phone_' + id, phone, 'RW-' + id.replaceAll('-', '').toUpperCase()).run();
+    if (challenge.purpose === 'register' || challenge.purpose === 'recover') {
+      if (current) throw new ApiError(409, '請先登出再註冊或重設密碼。');
+      const owner = await db.prepare('SELECT id, status FROM members WHERE phone = ? AND phone_verified_at IS NOT NULL').bind(phone).first<{ id: string; status: string }>();
+      if (challenge.purpose === 'register' && owner) throw new ApiError(409, '此手機已註冊，請登入或使用忘記密碼。');
+      if (challenge.purpose === 'recover' && !owner) throw new ApiError(404, '此手機尚未註冊。');
+      if (owner && owner.status !== 'active') throw new ApiError(403, 'PLAYER SUSPENDED');
+      const token = crypto.randomUUID() + crypto.randomUUID();
+      await db.prepare('UPDATE otp_challenges SET recovery_hash = ?, expires_at = ? WHERE id = ?').bind(await digest(token), Date.now() + 300000, body.challengeId).run();
+      return json({ setupToken: token, challengeId: body.challengeId, status: '手機驗證成功，請設定密碼。' });
     }
     const owner = await db.prepare('SELECT id, status FROM members WHERE phone = ? AND phone_verified_at IS NOT NULL').bind(phone).first<{ id: string; status: string }>();
     if (!owner) throw new ApiError(404, '找不到會員，請使用手機註冊；若註冊已關閉，請稍後再試。');
