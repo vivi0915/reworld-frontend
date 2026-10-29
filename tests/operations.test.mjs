@@ -142,7 +142,7 @@ test('Guest → Player → Verified Player, recovery, rewards and existing opera
   await call('admin/settings','PATCH',{store_online:true,door_access_enabled:false,card_draw_enabled:false,registration_enabled:true},adminLogin);
   assert.equal((await call('access','POST',{})).status,403);assert.equal((await call('draws','POST',{role:'高級牛馬'})).status,403);
   await call('admin/settings','PATCH',{door_access_enabled:true,door_pin:null},adminLogin);assert.equal((await call('access','POST',{})).status,403);
-  assert.equal((await call('member/register','POST',{})).status,410);
+  assert.equal((await call('member/register','POST',{})).status,400);
   const bad=await otp('0944444444');for(let i=0;i<5;i++) assert.equal((await call('member/otp/verify','POST',{...bad,code:bad.code==='000000'?'111111':'000000'})).status,400);assert.equal((await call('member/otp/verify','POST',bad)).status,400);
   const expired=await otp('0955555555');sql.prepare('UPDATE otp_challenges SET expires_at=0 WHERE id=?').run(expired.challengeId);assert.equal((await call('member/otp/verify','POST',expired)).status,400);
   const limitPlayer=await create();
@@ -176,4 +176,19 @@ test('phone registration requires OTP then password; password login and reset pr
  const login=await call('member/login','POST',{phone:'0981234567',password:'new-password-456'});assert.equal((await member(login.cookie)).id,identity.id);
  sql.exec('DELETE FROM otp_limits');const expiry=await call('member/otp/verify','POST',await otp('0981234567'));sql.prepare('UPDATE otp_challenges SET expires_at=0 WHERE id=?').run(expiry.data.challengeId);assert.equal((await finish(expiry.data)).status,400);
  sql.exec('DELETE FROM otp_limits');const concurrent=await call('member/otp/verify','POST',await otp('0981234567'));const results=await Promise.all([finish(concurrent.data),finish(concurrent.data)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
+});
+
+test('registration without SMS keeps phone unverified and supports password login', async()=>{
+ sql.exec('UPDATE system_settings SET registration_enabled=1');
+ const sms=globalThis.__reworldTestEnv.SMS;delete globalThis.__reworldTestEnv.SMS;
+ try {
+ const body={phone:'0961234567',password:'test-register-password',confirmPassword:'test-register-password'};
+ const results=await Promise.all([call('member/register','POST',body),call('member/register','POST',body)]);
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ const identity=await member(results.find(r=>r.status===200).cookie);assert.equal(identity.phoneVerified,0);assert.equal(identity.phoneVerifiedAt,null);
+ const login=await call('member/login','POST',{phone:body.phone,password:body.password});assert.equal(login.status,200);assert.equal((await member(login.cookie)).id,identity.id);
+ assert.equal((await call('member/login','POST',{phone:body.phone,password:'wrong-password'})).status,401);
+ assert.equal((await call('member/register','POST',{...body,phone:'0961234568',confirmPassword:'mismatch'})).status,400);
+ sql.exec('UPDATE system_settings SET registration_enabled=0');assert.equal((await call('member/register','POST',{...body,phone:'0961234568'})).status,409);
+ } finally {globalThis.__reworldTestEnv.SMS=sms;}
 });

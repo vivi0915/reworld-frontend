@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const username = phone ?? account(body.username);
     const secret = password(body.password);
     await rateLimit(request, username, "login");
-    const member = await database().prepare(phone ? "SELECT id, password_hash FROM members WHERE phone = ? AND phone_verified_at IS NOT NULL" : "SELECT id, password_hash FROM members WHERE username = ?").bind(username).first<{ id: string; password_hash: string }>();
+    const member = await database().prepare(phone ? "SELECT id, password_hash FROM members WHERE phone = ?" : "SELECT id, password_hash FROM members WHERE username = ?").bind(username).first<{ id: string; password_hash: string }>();
     if (!await verifyPassword(secret, member?.password_hash) || !member) throw new ApiError(401, "帳號或密碼不正確。");
     return json({ ok: true }, 200, { "Set-Cookie": await createSession(request, member.id) });
   } catch (error) { return apiError(error); }
