@@ -1,41 +1,9 @@
 import { ApiError, apiError, database, currentMember, json, readBody, requireMember } from "@/lib/member-auth";
+import { chooseReward } from '@/lib/role-rewards';
 import { guestSession, settings } from '@/lib/operations';
 
 const roles = ["高級牛馬", "摸魚大師", "畫餅充飢", "人生勝利組"] as const;
 type Role = (typeof roles)[number];
-
-const rewardPools: Record<Role, Array<{ label: string; weight: number }>> = {
-  高級牛馬: [
-    { label: "本次消費 9 折", weight: 20 },
-    { label: "魔力 Shot 一杯", weight: 35 },
-    { label: "指定調酒升級", weight: 45 },
-  ],
-  摸魚大師: [
-    { label: "本次消費 9 折", weight: 20 },
-    { label: "精準 Shot 一杯", weight: 35 },
-    { label: "指定調酒升級", weight: 45 },
-  ],
-  畫餅充飢: [
-    { label: "本次消費 9 折", weight: 20 },
-    { label: "隱藏 Shot 一杯", weight: 35 },
-    { label: "神秘小食一份", weight: 45 },
-  ],
-  人生勝利組: [
-    { label: "本次消費 9 折", weight: 20 },
-    { label: "勇者 Shot 一杯", weight: 35 },
-    { label: "指定調酒升級", weight: 45 },
-  ],
-};
-
-function chooseReward(role: Role) {
-  const roll = Math.random() * 100;
-  let cursor = 0;
-  for (const reward of rewardPools[role]) {
-    cursor += reward.weight;
-    if (roll < cursor) return reward.label;
-  }
-  return rewardPools[role][rewardPools[role].length - 1].label;
-}
 
 export async function GET(request: Request) {
   try {
@@ -56,7 +24,7 @@ export async function POST(request: Request) {
     const member = await currentMember(request);
     const role = payload.role as Role;
     if (!roles.includes(role)) throw new ApiError(400, "請選擇有效角色。");
-    const reward = chooseReward(role);
+    const reward = chooseReward();
     if (!member) {
       const guest = await guestSession(request);
       const id = crypto.randomUUID();
