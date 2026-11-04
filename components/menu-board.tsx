@@ -115,7 +115,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
       </>}
     </section>
     {error && <div role="alert"><p>{error}</p><Button variant="outline" onClick={() => lifetime.current && void refresh(lifetime.current.signal)}>重新讀取進度</Button></div>}
-    <p className="demo-note">四種角色 × 各三杯 · 酒名與價格待確認</p>
+    <p className="demo-note">四種角色 × 各三杯 · 點選酒款查看材料與酒感</p>
     <div className="menu-board" aria-label="十二杯調酒">
       {drinks.map((drink,i) => {
         const status = state(drink.id)?.status;
@@ -124,7 +124,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
         return <button key={drink.id} className={`menu-tile ${selected === i ? 'selected' : ''} ${position === i ? 'occupied' : ''} ${current ? 'exploration-' + (status || 'locked') : ''}`}
           style={{ gridRow: positions[i][0], gridColumn: positions[i][1], '--tile-color': drink.color } as React.CSSProperties}
           onClick={() => setSelected(i)} disabled={rolling || busy} aria-pressed={selected === i} aria-label={`${drink.name}${current ? '，' + label : ''}`}>
-          <span className="tile-number">{drink.code} · {drink.number}</span><strong>{drink.name}</strong>
+          <span className="tile-number">{drink.code} · {drink.number}</span><strong>{drink.name}</strong><small>{drink.role}</small>
           {current && <span className="tile-state"><Icon size={13} aria-hidden="true" />{label}</span>}
           {position === i && <MapPin size={17} className="board-token" aria-hidden="true" />}
         </button>;
@@ -139,7 +139,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
     <p className="board-status" role="status">{message}</p>
     <article className="menu-detail" aria-live="polite">
       <div className="menu-detail-category"><Martini size={18} />{item.category}</div>
-      <div className="menu-detail-heading"><h2>{item.name}</h2><strong>價格待確認</strong></div><p>{item.description}</p>
+      <div className="menu-detail-heading"><h2>{item.name}</h2><strong>價格待確認</strong></div><p><strong>材料：</strong>{item.description}</p><p><strong>酒感：</strong>{item.alcoholIntensity}</p>
       {current && <p>{explorationLabel(record?.status)}{record?.confirmedAt && ` · 首次完成：${new Date(record.confirmedAt.replace(' ','T')+'Z').toLocaleDateString('zh-TW',{ timeZone: 'Asia/Taipei' })}`}</p>}
       {member && <><Button className="primary-action" disabled={!current || busy || rolling || record?.status === 'pending'} onClick={() => void choose()}>{busy ? '送出中…' : record?.status === 'pending' ? '已送出 · 等待店員確認' : '本次選擇這杯'}</Button><p className="screen-copy">{record?.status === 'completed' ? '這杯已探索，再次選擇不會重複計入。' : '送出後僅建立待確認紀錄，請由店員核對。'}</p></>}
       <small>探索菜單不會下單或產生費用。</small>
