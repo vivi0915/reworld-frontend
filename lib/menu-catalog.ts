@@ -5,122 +5,115 @@ const groups = [
   { role: '人生勝利組', code: '04', color: '#ff7048' },
   { role: '畫餅充飢', code: '03', color: '#a861ff' },
 ];
-// Source: 2026 酒單架構整理 / for chatgpt, rows 2–13.
+// Names originated in the menu sheet; ingredients and prices confirmed by the owner.
 // Public ingredient names only; quantities and preparation notes are omitted.
 // Default intensity is first/light, second/medium, third/strong; explicit recipe levels override it.
-const recipes: Record<string, Array<{ name: string; ingredients: string[]; alcoholLevel?: number }>> = {
+const recipes: Record<string, Array<{ name: string; ingredients: string[]; price: number; alcoholLevel?: number }>> = {
   "01": [
     {
       "name": "精緻窮",
       "ingredients": [
-        "桂花 infused 伏特加",
-        "洛神 Acid",
-        "桂花 syrup",
-        "葡萄利口酒",
-        "香草苦精"
-      ]
+        "伏特加",
+        "桂花",
+        "洛神",
+        "葡萄",
+        "香草"
+      ],
+      "price": 380
     },
     {
       "name": "高規格加班",
       "ingredients": [
-        "咖啡 infuse 伏特加",
-        "Chocolate bitter",
-        "Redbull Syrup",
-        "Heering",
-        "Aer",
-        "chocolate liqueur"
-      ]
+        "伏特加",
+        "咖啡",
+        "巧克力",
+        "Redbull",
+        "櫻桃"
+      ],
+      "price": 430
     },
     {
       "name": "KPI壓頂",
       "ingredients": [
-        "甘草 infused Gin",
-        "Merlet 黑醋栗",
-        "Fruko 紅",
-        "蔓越莓苦精",
-        "Acid Blended",
-        "syrup"
-      ]
+        "Gin",
+        "黑醋栗",
+        "火焰艾碧斯",
+        "蔓越莓"
+      ],
+      "price": 430
     }
   ],
   "02": [
     {
       "name": "切換分頁",
       "ingredients": [
-        "Dark Rum",
-        "Merlet 水蜜桃",
-        "草莓果泥",
-        "月桃花純露",
-        "香草糖漿",
-        "Scrappy's lime bitter",
+        "深色蘭姆酒",
+        "水蜜桃",
+        "草莓",
+        "香草",
+        "月桃花",
         "佛手柑",
         "牛奶"
-      ]
+      ],
+      "price": 400
     },
     {
       "name": "薪水小偷",
       "ingredients": [
-        "威士忌",
-        "紅心芭樂果泥",
-        "Almond bitter",
-        "覆盆莓利口酒",
-        "焦糖糖漿",
-        "lemon juice",
-        "orange juice",
-        "orange bitter",
-        "cream cheese"
-      ]
+        "蘇格蘭威士忌",
+        "紅心芭樂",
+        "覆盆莓",
+        "焦糖",
+        "杏仁",
+        "柳橙"
+      ],
+      "price": 420
     },
     {
       "name": "帶薪如廁",
       "ingredients": [
-        "梅乾菜 infuse Mezcal",
-        "羅望子 Syrup",
-        "焙茶 liqueur",
-        "Scrappy's Fire Tincture",
-        "Orange bitter"
-      ]
+        "梅茲卡爾",
+        "梅干菜",
+        "羅望子",
+        "焙茶"
+      ],
+      "price": 480
     }
   ],
   "03": [
     {
       "name": "上市敲鐘",
       "ingredients": [
-        "烏龍茶 infused Gin",
-        "Giffard Elderflower",
-        "Lillet",
+        "琴酒",
+        "烏龍茶",
+        "接骨木花",
         "梅酒",
-        "萬壽菊純露",
-        "Greek Yogurt",
-        "lemon juice",
-        "syrup",
-        "Grapefruit Soda"
-      ]
+        "萬壽菊",
+        "希臘無糖優格",
+        "葡萄柚蘇打水"
+      ],
+      "price": 400
     },
     {
       "name": "明年幫你加薪",
       "ingredients": [
-        "Bianco",
-        "Fermented 苦瓜",
-        "哈密瓜利口酒",
         "波本威士忌",
-        "餅乾利口酒",
-        "lemon juice",
-        "syrup",
-        "hibiki bitter"
-      ]
+        "哈密瓜",
+        "餅乾",
+        "苦瓜"
+      ],
+      "price": 420
     },
     {
       "name": "當自己家",
       "ingredients": [
-        "Dark Rum",
-        "A&H Mango",
-        "Dover 小豆",
-        "Monin 紅豆",
+        "深色蘭姆酒",
+        "芒果",
+        "紅豆",
         "豆腐乳",
-        "甜米釀",
-        "angus bitter"
-      ]
+        "甜米釀"
+      ],
+      "price": 450
     }
   ],
   "04": [
@@ -128,36 +121,36 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; alcoh
       "name": "富二代",
       "alcoholLevel": 2,
       "ingredients": [
-        "椰子 Soda",
-        "Gin infused 白山茶花",
-        "Dover 紫蘇",
-        "Lillet",
-        "野薑花純露",
-        "syrup"
-      ]
+        "琴酒",
+        "白山茶花",
+        "紫蘇",
+        "野薑花",
+        "麗葉酒"
+      ],
+      "price": 420
     },
     {
       "name": "財富自由",
       "alcoholLevel": 1,
       "ingredients": [
-        "Rum",
-        "passion fruit liqueur",
-        "Giffard White Cocoa",
-        "香蕉果泥",
-        "鳳梨汁",
-        "夏威夷果糖漿",
-        "Lime Juice"
-      ]
+        "蘭姆酒",
+        "百香果",
+        "白可可",
+        "香蕉",
+        "鳳梨",
+        "夏威夷果仁"
+      ],
+      "price": 400
     },
     {
       "name": "金湯匙",
       "ingredients": [
-        "Tequila reposado fat-wash Truffle Sauce",
-        "Honey",
-        "刺蔥利口酒",
-        "Umami bitters",
-        "Walnut bitters"
-      ]
+        "龍舌蘭",
+        "松露",
+        "刺蔥",
+        "蜂蜜"
+      ],
+      "price": 480
     }
   ]
 };
