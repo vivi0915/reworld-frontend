@@ -7,8 +7,8 @@ const groups = [
 ];
 // Source: 2026 酒單架構整理 / for chatgpt, rows 2–13.
 // Public ingredient names only; quantities and preparation notes are omitted.
-// Alcohol intensity follows the owner's rule: first/light, second/medium, third/strong.
-const recipes: Record<string, Array<{ name: string; ingredients: string[] }>> = {
+// Default intensity is first/light, second/medium, third/strong; explicit recipe levels override it.
+const recipes: Record<string, Array<{ name: string; ingredients: string[]; alcoholLevel?: number }>> = {
   "01": [
     {
       "name": "精緻窮",
@@ -126,6 +126,7 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[] }>> = 
   "04": [
     {
       "name": "富二代",
+      "alcoholLevel": 2,
       "ingredients": [
         "椰子 Soda",
         "Gin infused 白山茶花",
@@ -137,6 +138,7 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[] }>> = 
     },
     {
       "name": "財富自由",
+      "alcoholLevel": 1,
       "ingredients": [
         "Rum",
         "passion fruit liqueur",
@@ -163,8 +165,8 @@ export const drinks = groups.flatMap(group => recipes[group.code].map((recipe, i
   ...group, id: `role-${group.code}-drink-${index + 1}`, number: index + 1,
   ...recipe, category: `${group.code} · ${group.role}專屬`,
   description: recipe.ingredients.join('、'),
-  alcoholIntensity: ['酒輕', '酒中', '酒重'][index],
-  alcoholLevel: index + 1,
+  alcoholIntensity: ['酒輕', '酒中', '酒重'][(recipe.alcoholLevel ?? index + 1) - 1],
+  alcoholLevel: recipe.alcoholLevel ?? index + 1,
 })));
 export type ExplorationRecord = {
   drinkId: string; status: 'pending' | 'completed' | 'revoked';
