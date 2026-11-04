@@ -139,7 +139,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
     <p className="board-status" role="status">{message}</p>
     <article className="menu-detail" aria-live="polite">
       <div className="menu-detail-category"><Martini size={18} />{item.category}</div>
-      <div className="menu-detail-heading"><h2>{item.name}</h2><strong>價格待確認</strong></div><p><strong>材料：</strong>{item.description}</p><p><strong>酒感：</strong>{item.alcoholIntensity}</p>
+      <div className="menu-detail-heading"><h2>{item.name}</h2><strong>價格待確認</strong></div><p><strong>材料：</strong>{item.description}</p><p className="flex items-center gap-2"><strong>酒感：</strong><span className="inline-flex items-center gap-1" aria-hidden="true">{Array.from({ length: item.alcoholLevel }, (_, index) => <svg key={index} width="18" height="24" viewBox="0 0 18 24" fill="none"><path d="M3 3H15L13 21H5L3 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /><path d="M4 10H14L13 20H5L4 10Z" fill="currentColor" opacity=".35" /></svg>)}</span><span>{item.alcoholIntensity}</span></p>
       {current && <p>{explorationLabel(record?.status)}{record?.confirmedAt && ` · 首次完成：${new Date(record.confirmedAt.replace(' ','T')+'Z').toLocaleDateString('zh-TW',{ timeZone: 'Asia/Taipei' })}`}</p>}
       {member && <><Button className="primary-action" disabled={!current || busy || rolling || record?.status === 'pending'} onClick={() => void choose()}>{busy ? '送出中…' : record?.status === 'pending' ? '已送出 · 等待店員確認' : '本次選擇這杯'}</Button><p className="screen-copy">{record?.status === 'completed' ? '這杯已探索，再次選擇不會重複計入。' : '送出後僅建立待確認紀錄，請由店員核對。'}</p></>}
       <small>探索菜單不會下單或產生費用。</small>

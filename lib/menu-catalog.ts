@@ -7,7 +7,7 @@ const groups = [
 ];
 // Source: 2026 酒單架構整理 / for chatgpt, rows 2–13.
 // Public ingredient names only; quantities and preparation notes are omitted.
-// The source does not yet supply alcohol intensity.
+// Alcohol intensity follows the owner's rule: first/light, second/medium, third/strong.
 const recipes: Record<string, Array<{ name: string; ingredients: string[] }>> = {
   "01": [
     {
@@ -163,7 +163,8 @@ export const drinks = groups.flatMap(group => recipes[group.code].map((recipe, i
   ...group, id: `role-${group.code}-drink-${index + 1}`, number: index + 1,
   ...recipe, category: `${group.code} · ${group.role}專屬`,
   description: recipe.ingredients.join('、'),
-  alcoholIntensity: '待確認',
+  alcoholIntensity: ['酒輕', '酒中', '酒重'][index],
+  alcoholLevel: index + 1,
 })));
 export type ExplorationRecord = {
   drinkId: string; status: 'pending' | 'completed' | 'revoked';
