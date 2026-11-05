@@ -189,7 +189,7 @@ const recipes: Record<string, Array<{ name: string; englishName: string; english
       ],
       "price": 450,
       "slot": 3,
-      "englishName": "Make Yourself at Home",
+      "englishName": "Make Yourself at Company",
       "englishIngredients": [
         "Dark Rum",
         "Mango",
@@ -254,7 +254,7 @@ const recipes: Record<string, Array<{ name: string; englishName: string; english
       ],
       "price": 480,
       "slot": 3,
-      "englishName": "Born with a Silver Spoon",
+      "englishName": "Born with a Golden Spoon",
       "englishIngredients": [
         "Tequila",
         "Truffle",
