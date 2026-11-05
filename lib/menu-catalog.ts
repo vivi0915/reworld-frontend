@@ -8,7 +8,7 @@ const groups = [
 // Names originated in the menu sheet; ingredients and prices confirmed by the owner.
 // Public ingredient names only; quantities and preparation notes are omitted.
 // Default intensity is first/light, second/medium, third/strong; explicit recipe levels override it.
-const recipes: Record<string, Array<{ name: string; slot: number; ingredients: string[]; price: number; alcoholLevel?: number }>> = {
+const recipes: Record<string, Array<{ name: string; englishName: string; englishIngredients: string[]; slot: number; ingredients: string[]; price: number; alcoholLevel?: number }>> = {
   "01": [
     {
       "name": "精緻窮",
@@ -20,7 +20,15 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "香草"
       ],
       "price": 380,
-      "slot": 1
+      "slot": 1,
+      "englishName": "Broke in Style",
+      "englishIngredients": [
+        "Vodka",
+        "Osmanthus",
+        "Roselle",
+        "Grape",
+        "Vanilla"
+      ]
     },
     {
       "name": "高規格加班",
@@ -32,7 +40,15 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "櫻桃"
       ],
       "price": 430,
-      "slot": 2
+      "slot": 2,
+      "englishName": "Overtime Deluxe",
+      "englishIngredients": [
+        "Vodka",
+        "Coffee",
+        "Chocolate",
+        "Red Bull",
+        "Cherry"
+      ]
     },
     {
       "name": "KPI壓頂",
@@ -43,7 +59,14 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "蔓越莓"
       ],
       "price": 430,
-      "slot": 3
+      "slot": 3,
+      "englishName": "Crushed by KPIs",
+      "englishIngredients": [
+        "Gin",
+        "Blackcurrant",
+        "Flaming Absinthe",
+        "Cranberry"
+      ]
     }
   ],
   "02": [
@@ -59,7 +82,17 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "牛奶"
       ],
       "price": 400,
-      "slot": 1
+      "slot": 1,
+      "englishName": "Alt + Tab",
+      "englishIngredients": [
+        "Dark Rum",
+        "Peach",
+        "Strawberry",
+        "Vanilla",
+        "Shell Ginger Flower",
+        "Bergamot",
+        "Milk"
+      ]
     },
     {
       "name": "薪水小偷",
@@ -72,7 +105,16 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "柳橙"
       ],
       "price": 420,
-      "slot": 2
+      "slot": 2,
+      "englishName": "Wage Thief",
+      "englishIngredients": [
+        "Scotch Whisky",
+        "Pink Guava",
+        "Raspberry",
+        "Caramel",
+        "Almond",
+        "Orange"
+      ]
     },
     {
       "name": "帶薪如廁",
@@ -83,7 +125,14 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "焙茶"
       ],
       "price": 480,
-      "slot": 3
+      "slot": 3,
+      "englishName": "Paid Bathroom Break",
+      "englishIngredients": [
+        "Mezcal",
+        "Preserved Mustard Greens",
+        "Tamarind",
+        "Hojicha"
+      ]
     }
   ],
   "03": [
@@ -99,7 +148,17 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "葡萄柚蘇打水"
       ],
       "price": 400,
-      "slot": 1
+      "slot": 1,
+      "englishName": "Ring the IPO Bell",
+      "englishIngredients": [
+        "Gin",
+        "Oolong Tea",
+        "Elderflower",
+        "Plum Wine",
+        "Marigold",
+        "Unsweetened Greek Yogurt",
+        "Grapefruit Soda"
+      ]
     },
     {
       "name": "明年幫你加薪",
@@ -110,7 +169,14 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "苦瓜"
       ],
       "price": 420,
-      "slot": 2
+      "slot": 2,
+      "englishName": "A Raise Next Year",
+      "englishIngredients": [
+        "Bourbon Whiskey",
+        "Cantaloupe",
+        "Cookie",
+        "Bitter Melon"
+      ]
     },
     {
       "name": "當自己家",
@@ -122,7 +188,15 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "甜米釀"
       ],
       "price": 450,
-      "slot": 3
+      "slot": 3,
+      "englishName": "Make Yourself at Home",
+      "englishIngredients": [
+        "Dark Rum",
+        "Mango",
+        "Red Bean",
+        "Fermented Tofu",
+        "Sweet Fermented Rice"
+      ]
     }
   ],
   "04": [
@@ -138,7 +212,16 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "夏威夷果仁"
       ],
       "price": 400,
-      "slot": 2
+      "slot": 2,
+      "englishName": "Financial Freedom",
+      "englishIngredients": [
+        "Rum",
+        "Passion Fruit",
+        "White Cocoa",
+        "Banana",
+        "Pineapple",
+        "Macadamia"
+      ]
     },
     {
       "name": "富二代",
@@ -151,7 +234,15 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "麗葉酒"
       ],
       "price": 420,
-      "slot": 1
+      "slot": 1,
+      "englishName": "Trust Fund Baby",
+      "englishIngredients": [
+        "Gin",
+        "White Camellia",
+        "Shiso",
+        "White Ginger Lily",
+        "Lillet"
+      ]
     },
     {
       "name": "金湯匙",
@@ -162,7 +253,14 @@ const recipes: Record<string, Array<{ name: string; slot: number; ingredients: s
         "蜂蜜"
       ],
       "price": 480,
-      "slot": 3
+      "slot": 3,
+      "englishName": "Born with a Silver Spoon",
+      "englishIngredients": [
+        "Tequila",
+        "Truffle",
+        "Prickly Ash",
+        "Honey"
+      ]
     }
   ]
 };
