@@ -17,7 +17,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
   const [selected, setSelected] = useState(0);
   const [dice, setDice] = useState([1,1]);
   const [rolling, setRolling] = useState(false);
-  const [message, setMessage] = useState('擲兩顆骰子選酒，也可以直接點選酒款。');
+  const [message, setMessage] = useState('點選任一酒款設定起點，再擲骰探索下一杯。');
   const [progress, setProgress] = useState<Exploration | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -100,7 +100,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
   }
   return <div className="screen menu-screen">
     <div className="eyebrow">FLAVOR MAP · 04</div><h1>風味大富翁</h1>
-    <p className="screen-copy">擲兩顆骰子探索菜單，決定今晚的靈感。</p>
+    <p className="screen-copy">點選酒款設定起點，擲骰探索今晚的靈感。</p>
     <section className="exploration-summary" aria-label="酒單探索進度" aria-live="polite">
       {memberLoading ? <p>正在確認登入狀態…</p> : !member ? <>
         <p>登入會員，記錄你的探索進度；集滿 12 杯，解鎖實體酒單。</p>
@@ -123,7 +123,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
         const Icon = status === 'completed' ? Check : status === 'pending' ? Hourglass : LockKeyhole;
         return <button key={drink.id} className={`menu-tile ${selected === i ? 'selected' : ''} ${position === i ? 'occupied' : ''} ${current ? 'exploration-' + (status || 'locked') : ''}`}
           style={{ gridRow: positions[i][0], gridColumn: positions[i][1], '--tile-color': drink.color } as React.CSSProperties}
-          onClick={() => setSelected(i)} disabled={rolling || busy} aria-pressed={selected === i} aria-label={`${drink.name} ${drink.englishName}${current ? '，' + label : ''}`}>
+          onClick={() => { setSelected(i); setPosition(i); setMessage(`已將「${drink.name}」設為起點，下次擲骰將從這裡前進。`); }} disabled={rolling || busy} aria-pressed={selected === i} aria-label={`${drink.name} ${drink.englishName}${current ? '，' + label : ''}`}>
           <span className="tile-number">{drink.code} · {drink.number}</span><strong>{drink.name}</strong><small>{drink.role}</small>
           {current && <span className="tile-state"><Icon size={13} aria-hidden="true" />{label}</span>}
           {position === i && <MapPin size={17} className="board-token" aria-hidden="true" />}
