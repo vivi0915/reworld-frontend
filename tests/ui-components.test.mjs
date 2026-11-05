@@ -95,23 +95,27 @@ test("Guest menu contains twelve drinks and two dice without personal completion
   assert.doesNotMatch(html,/DISCOVERED|tile-state|只骰未完成酒款/);
 });
 
-test("ordered dice pairs distribute equally for every eligible pool size", async () => {
+test("dice totals match clockwise travel for all starts and eligible destinations", async () => {
   const {rollMenuDice,drinks}=await vite.ssrLoadModule("/lib/menu-catalog.ts");
-  assert.equal(new Set(drinks.map(d=>d.id)).size,12);
-  assert.deepEqual([...new Set(drinks.map(d=>d.color))],['#16e0bc','#23a7ff','#a861ff','#ff7048']);
-  for(let count=1;count<=12;count++){
-    const frequency=Array(count).fill(0), limit=36-36%count;
-    for(let pair=0;pair<limit;pair++){
-      const values=[Math.floor(pair/6),pair%6];
-      const result=rollMenuDice(count,()=>values.shift());
-      frequency[result.index]++;
-      assert.equal((result.dice[0]-1)*6+result.dice[1]-1,pair);
+  for(let position=0;position<12;position++){
+    for(const pool of [drinks.map((_,i)=>i),[0,3,7,11],[position]]){
+      const targets=[];
+      for(let pick=0;pick<pool.length;pick++){
+        const result=rollMenuDice(position,pool,size=>{assert.equal(size,pool.length);return pick;});
+        targets.push(result.target);
+        assert.equal((position+result.steps)%12,result.target);
+        assert.equal(result.dice[0]+result.dice[1],result.steps);
+        assert.ok(result.steps>=1 && result.steps<=12);
+        assert.ok(result.dice.every(n=>n>=0 && n<=6));
+        if(result.steps===1) assert.deepEqual(result.dice,[1,0]);
+        else assert.ok(result.dice.every(n=>n>=1));
+        if(result.target===position) assert.equal(result.steps,12);
+      }
+      assert.deepEqual(targets,pool);
     }
-    assert.ok(frequency.every(n=>n===limit/count));
   }
-  const rejectedThenAccepted=[5,5,0,0]; // 35 is rejected for seven eligible drinks.
-  assert.equal(rollMenuDice(7,()=>rejectedThenAccepted.shift()).index,0);
-  assert.equal(rejectedThenAccepted.length,0);
+  assert.throws(()=>rollMenuDice(0,[]));
+  assert.throws(()=>rollMenuDice(0,[0,0]));
 });
 
 test("menu order preserves existing exploration IDs", async () => {

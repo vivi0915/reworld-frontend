@@ -287,12 +287,15 @@ export function uniformInt(size: number): number {
   do { value = crypto.getRandomValues(new Uint8Array(1))[0]; } while (value >= limit);
   return value % size;
 }
-// Each accepted ordered pair is equally likely. For twelve drinks each has
-// exactly three of the 36 pairs. Reject surplus pairs for filtered pools.
-export function rollMenuDice(count: number, random = uniformInt) {
-  if (!Number.isInteger(count) || count < 1 || count > drinks.length) throw new Error('No eligible drinks');
-  const limit = 36 - 36 % count;
-  let pair: number;
-  do { pair = random(6) * 6 + random(6); } while (pair >= limit);
-  return { dice: [Math.floor(pair / 6) + 1, pair % 6 + 1], index: pair % count };
+// Choose an eligible destination uniformly, then display its clockwise distance.
+export function rollMenuDice(position: number, eligible: number[], random = uniformInt) {
+  if (!Number.isInteger(position) || position < 0 || position >= drinks.length ||
+      !eligible.length || new Set(eligible).size !== eligible.length ||
+      eligible.some(index => !Number.isInteger(index) || index < 0 || index >= drinks.length)) {
+    throw new Error('Invalid board position or eligible drinks');
+  }
+  const target = eligible[random(eligible.length)];
+  const steps = (target - position + drinks.length) % drinks.length || drinks.length;
+  const first = steps === 1 ? 1 : Math.min(6, steps - 1);
+  return { dice: [first, steps - first], target, steps };
 }
