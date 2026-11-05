@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Hourglass, LockKeyhole, MapPin, Martini, Ticket } from 'lucide-react';
+import { Check, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Hourglass, LockKeyhole, MapPin, Martini, Square, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { MemberPanel } from '@/components/member-panel';
@@ -84,19 +84,19 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
   function roll() {
     if (running.current) return;
     const pool = drinks.map((drink,index) => ({ drink,index })).filter(({drink}) => !(onlyNew && current && !allDone) || state(drink.id)?.status !== 'completed');
-    const result = rollMenuDice(pool.length);
-    const target = pool[result.index].index;
-    running.current = true; setRolling(true); setMessage('骰子滾動中…');
+    const result = rollMenuDice(position, pool.map(({index}) => index));
+    const target = result.target;
+    running.current = true; setRolling(true); setDice(result.dice); setMessage(`前進 ${result.steps} 格…`);
     const finish = () => {
       setDice(result.dice); setPosition(target); setSelected(target);
-      setMessage(`擲出 ${result.dice[0]}、${result.dice[1]} 點，選中「${drinks[target].name}」${state(drinks[target].id)?.status === 'completed' ? ' · 已探索' : ''}。`);
+      setMessage(`前進 ${result.steps} 格，選中「${drinks[target].name}」${state(drinks[target].id)?.status === 'completed' ? ' · 已探索' : ''}。`);
       setRolling(false); running.current = false; timers.current = [];
     };
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
-    for (let step = 1; step <= 12; step++) timers.current.push(setTimeout(() => {
-      setPosition((position + step) % drinks.length); setDice([step % 6 + 1, (step + 2) % 6 + 1]);
-    }, step * 70));
-    timers.current.push(setTimeout(finish, 1000));
+    for (let step = 1; step <= result.steps; step++) timers.current.push(setTimeout(() => {
+      setPosition((position + step) % drinks.length);
+    }, step * 180));
+    timers.current.push(setTimeout(finish, result.steps * 180 + 80));
   }
   return <div className="screen menu-screen">
     <div className="eyebrow">FLAVOR MAP · 04</div><h1>風味大富翁</h1>
@@ -129,13 +129,13 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
           {position === i && <MapPin size={17} className="board-token" aria-hidden="true" />}
         </button>;
       })}
-      <div className="board-center"><span>re:world</span><div className="menu-dice">{dice.map((value,i) => {
-        const Dice = diceIcons[value-1]; return <Dice key={i} size={34} className={rolling ? 'dice-rolling' : ''} aria-label={`骰子 ${i+1}：${value} 點`} />;
+      <div className="board-center"><div className="menu-dice">{dice.map((value,i) => {
+        const Dice = value === 0 ? Square : diceIcons[value-1]; return <Dice key={i} size={34} className={rolling ? 'dice-rolling' : ''} aria-label={`骰子 ${i+1}：${value === 0 ? '空白' : value + ' 點'}`} />;
       })}</div><small>兩顆骰子 · 公平選酒</small></div>
     </div>
     {current && !allDone && <label className="menu-filter"><input type="checkbox" checked={onlyNew} disabled={rolling} onChange={e => setOnlyNew(e.target.checked)} />只骰未完成酒款</label>}
     <Button className="primary-action" onClick={roll} disabled={rolling || busy}>{rolling ? '探索中…' : '擲兩顆骰子，探索下一杯'}</Button>
-    <small className="dice-note">依骰子組合選酒，不以點數加總；每杯中選機率相同。</small>
+    <small className="dice-note">骰面點數總和即前進格數；1 格顯示 1＋空白，每杯中選機率相同。</small>
     <p className="board-status" role="status">{message}</p>
     <article className="menu-detail" aria-live="polite">
       <div className="menu-detail-category"><Martini size={18} />{item.category}</div>
