@@ -124,7 +124,7 @@ export function MenuBoard({ member, memberLoading, memberError, onRefresh, regis
         return <button key={drink.id} className={`menu-tile ${selected === i ? 'selected' : ''} ${position === i ? 'occupied' : ''} ${current ? 'exploration-' + (status || 'locked') : ''}`}
           style={{ gridRow: positions[i][0], gridColumn: positions[i][1], '--tile-color': drink.color } as React.CSSProperties}
           onClick={() => setSelected(i)} disabled={rolling || busy} aria-pressed={selected === i} aria-label={`${drink.name} ${drink.englishName}${current ? '，' + label : ''}`}>
-          <span className="tile-number">{drink.code} · {drink.number}</span><strong>{drink.name}<span className="menu-name-en" lang="en">{drink.englishName}</span></strong><small>{drink.role}</small>
+          <span className="tile-number">{drink.code} · {drink.number}</span><strong>{drink.name}</strong><small>{drink.role}</small>
           {current && <span className="tile-state"><Icon size={13} aria-hidden="true" />{label}</span>}
           {position === i && <MapPin size={17} className="board-token" aria-hidden="true" />}
         </button>;
