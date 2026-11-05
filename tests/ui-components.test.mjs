@@ -98,7 +98,7 @@ test("Guest menu contains twelve drinks and two dice without personal completion
 test("ordered dice pairs distribute equally for every eligible pool size", async () => {
   const {rollMenuDice,drinks}=await vite.ssrLoadModule("/lib/menu-catalog.ts");
   assert.equal(new Set(drinks.map(d=>d.id)).size,12);
-  assert.deepEqual([...new Set(drinks.map(d=>d.color))],['#23a7ff','#16e0bc','#ff7048','#a861ff']);
+  assert.deepEqual([...new Set(drinks.map(d=>d.color))],['#16e0bc','#23a7ff','#a861ff','#ff7048']);
   for(let count=1;count<=12;count++){
     const frequency=Array(count).fill(0), limit=36-36%count;
     for(let pair=0;pair<limit;pair++){
@@ -112,4 +112,14 @@ test("ordered dice pairs distribute equally for every eligible pool size", async
   const rejectedThenAccepted=[5,5,0,0]; // 35 is rejected for seven eligible drinks.
   assert.equal(rollMenuDice(7,()=>rejectedThenAccepted.shift()).index,0);
   assert.equal(rejectedThenAccepted.length,0);
+});
+
+test("menu order preserves existing exploration IDs", async () => {
+  const {drinks}=await vite.ssrLoadModule("/lib/menu-catalog.ts");
+  assert.deepEqual(drinks.filter(d=>d.number===1).map(d=>d.role),['摸魚大師','高級牛馬','畫餅充飢','人生勝利組']);
+  assert.deepEqual(drinks.filter(d=>d.code==='04').map(d=>[d.name,d.number,d.id,d.alcoholLevel]),[
+    ['財富自由',1,'role-04-drink-2',1],
+    ['富二代',2,'role-04-drink-1',2],
+    ['金湯匙',3,'role-04-drink-3',3],
+  ]);
 });

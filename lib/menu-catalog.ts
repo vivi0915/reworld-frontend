@@ -1,14 +1,14 @@
-// Stable IDs belong to the existing twelve menu slots, even when names are finalized.
+// Persisted slot IDs stay attached to each drink independently of display order.
 const groups = [
-  { role: '高級牛馬', code: '01', color: '#23a7ff' },
   { role: '摸魚大師', code: '02', color: '#16e0bc' },
-  { role: '人生勝利組', code: '04', color: '#ff7048' },
+  { role: '高級牛馬', code: '01', color: '#23a7ff' },
   { role: '畫餅充飢', code: '03', color: '#a861ff' },
+  { role: '人生勝利組', code: '04', color: '#ff7048' },
 ];
 // Names originated in the menu sheet; ingredients and prices confirmed by the owner.
 // Public ingredient names only; quantities and preparation notes are omitted.
 // Default intensity is first/light, second/medium, third/strong; explicit recipe levels override it.
-const recipes: Record<string, Array<{ name: string; ingredients: string[]; price: number; alcoholLevel?: number }>> = {
+const recipes: Record<string, Array<{ name: string; slot: number; ingredients: string[]; price: number; alcoholLevel?: number }>> = {
   "01": [
     {
       "name": "精緻窮",
@@ -19,7 +19,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "葡萄",
         "香草"
       ],
-      "price": 380
+      "price": 380,
+      "slot": 1
     },
     {
       "name": "高規格加班",
@@ -30,7 +31,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "Redbull",
         "櫻桃"
       ],
-      "price": 430
+      "price": 430,
+      "slot": 2
     },
     {
       "name": "KPI壓頂",
@@ -40,7 +42,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "火焰艾碧斯",
         "蔓越莓"
       ],
-      "price": 430
+      "price": 430,
+      "slot": 3
     }
   ],
   "02": [
@@ -55,7 +58,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "佛手柑",
         "牛奶"
       ],
-      "price": 400
+      "price": 400,
+      "slot": 1
     },
     {
       "name": "薪水小偷",
@@ -67,7 +71,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "杏仁",
         "柳橙"
       ],
-      "price": 420
+      "price": 420,
+      "slot": 2
     },
     {
       "name": "帶薪如廁",
@@ -77,7 +82,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "羅望子",
         "焙茶"
       ],
-      "price": 480
+      "price": 480,
+      "slot": 3
     }
   ],
   "03": [
@@ -92,7 +98,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "希臘無糖優格",
         "葡萄柚蘇打水"
       ],
-      "price": 400
+      "price": 400,
+      "slot": 1
     },
     {
       "name": "明年幫你加薪",
@@ -102,7 +109,8 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "餅乾",
         "苦瓜"
       ],
-      "price": 420
+      "price": 420,
+      "slot": 2
     },
     {
       "name": "當自己家",
@@ -113,22 +121,11 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "豆腐乳",
         "甜米釀"
       ],
-      "price": 450
+      "price": 450,
+      "slot": 3
     }
   ],
   "04": [
-    {
-      "name": "富二代",
-      "alcoholLevel": 2,
-      "ingredients": [
-        "琴酒",
-        "白山茶花",
-        "紫蘇",
-        "野薑花",
-        "麗葉酒"
-      ],
-      "price": 420
-    },
     {
       "name": "財富自由",
       "alcoholLevel": 1,
@@ -140,7 +137,21 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "鳳梨",
         "夏威夷果仁"
       ],
-      "price": 400
+      "price": 400,
+      "slot": 2
+    },
+    {
+      "name": "富二代",
+      "alcoholLevel": 2,
+      "ingredients": [
+        "琴酒",
+        "白山茶花",
+        "紫蘇",
+        "野薑花",
+        "麗葉酒"
+      ],
+      "price": 420,
+      "slot": 1
     },
     {
       "name": "金湯匙",
@@ -150,12 +161,13 @@ const recipes: Record<string, Array<{ name: string; ingredients: string[]; price
         "刺蔥",
         "蜂蜜"
       ],
-      "price": 480
+      "price": 480,
+      "slot": 3
     }
   ]
 };
 export const drinks = groups.flatMap(group => recipes[group.code].map((recipe, index) => ({
-  ...group, id: `role-${group.code}-drink-${index + 1}`, number: index + 1,
+  ...group, id: `role-${group.code}-drink-${recipe.slot}`, number: index + 1,
   ...recipe, category: `${group.code} · ${group.role}專屬`,
   description: recipe.ingredients.join('、'),
   alcoholIntensity: ['酒輕', '酒中', '酒重'][(recipe.alcoholLevel ?? index + 1) - 1],
