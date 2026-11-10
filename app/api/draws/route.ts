@@ -41,7 +41,7 @@ export async function POST(request: Request) {
           SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM draw_cooldowns WHERE session_id = ? AND claim_token = ?)
           RETURNING id, role, reward, created_at AS createdAt`).bind(claim, guest.id, role, reward, guest.id, claim);
     // D1 batch is transactional: a failed draw also rolls back the reservation.
-    const results = await db.batch([
+    const results = await db.batch<Record<string, unknown>>([
       reserve, insert,
       db.prepare('SELECT expires_at FROM draw_cooldowns WHERE session_id = ?').bind(guest.id),
     ]);
