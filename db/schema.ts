@@ -116,3 +116,9 @@ export const menuVouchers = sqliteTable('menu_vouchers', {
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   redeemedAt: text('redeemed_at'), redeemedBy: text('redeemed_by').references(() => members.id),
 });
+
+export const drawCooldowns = sqliteTable('draw_cooldowns', {
+  sessionId: text('session_id').primaryKey(),
+  claimToken: text('claim_token').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+});

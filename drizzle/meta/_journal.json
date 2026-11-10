@@ -36,6 +36,13 @@
       "when": 1791945600000,
       "tag": "0006_menu_exploration",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794355200000,
+      "tag": "0007_draw_cooldowns",
+      "breakpoints": true
     }
   ]
 }
