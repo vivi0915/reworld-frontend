@@ -22,6 +22,6 @@ export async function guestSession(request: Request) {
   const candidate = request.headers.get('cookie')?.split(';').map(x => x.trim()).find(x => x.startsWith('reworld_guest='))?.slice(14);
   const token = candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
   const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
-  return { id: await digest(token), cookie: `reworld_guest=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}` };
+  return { established: candidate === token, id: await digest(token), cookie: `reworld_guest=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}` };
 }
 export const playerRoles = ['高級牛馬', '摸魚大師', '畫餅充飢', '人生勝利組'];

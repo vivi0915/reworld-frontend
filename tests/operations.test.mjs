@@ -15,6 +15,7 @@ sql.exec(readFileSync('drizzle/0002_player_operations.sql', 'utf8'));
 sql.exec("INSERT INTO member_sessions VALUES('preserved-session','legacy',9999999999999); INSERT INTO player_history(id,user_id,type,value) VALUES('preserved-history','legacy','class','高級牛馬'); INSERT INTO reward_claims(id,user_id,reward_key,status,claimed_at) VALUES('preserved-claim','legacy','old-reward','claimed',CURRENT_TIMESTAMP);");
 sql.exec("INSERT INTO members(id,username,display_name,phone,password_hash,access_role,player_id,phone_verified) VALUES('verified-existing','verified-existing','Existing Verified','+886988888888','preserved-password-hash','admin','RW-EXISTING',1);");
 sql.exec(readFileSync('drizzle/0005_optional_phone_player.sql', 'utf8'));
+sql.exec(readFileSync('drizzle/0007_draw_cooldowns.sql', 'utf8'));
 const DB = {
   prepare(query) {
     let args = [];
@@ -31,7 +32,7 @@ const sent = [];
 globalThis.__reworldTestEnv = { DB, OTP_SECRET: 'test-only-secret-with-at-least-32-characters', SMS: { async fetch(url, options) { sent.push(JSON.parse(options.body)); return new Response(null, { status: 204 }); } } };
 const directory = '.sites-runtime/operations-tests'; mkdirSync(directory, { recursive: true });
 const routes = {};
-for (const name of ['system', 'access', 'draws', 'member', 'member/login', 'member/password', 'member/register', 'member/logout', 'member/otp/send', 'member/otp/verify', 'member/otp/restore', 'player/create', 'rewards/claim', 'player/history', 'admin/settings', 'admin/dashboard', 'admin/members', 'admin/member', 'admin/logs']) {
+for (const name of ['system', 'access', 'draws', 'draws/status', 'member', 'member/login', 'member/password', 'member/register', 'member/logout', 'member/otp/send', 'member/otp/verify', 'member/otp/restore', 'player/create', 'rewards/claim', 'player/history', 'admin/settings', 'admin/dashboard', 'admin/members', 'admin/member', 'admin/logs']) {
   const output = `${directory}/${name.replaceAll('/', '-')}.mjs`;
   await build({ entryPoints: [`app/api/${name}/route.ts`], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{ name: 'test-cloudflare', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'env', namespace: 'test' })); b.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: 'export const env = globalThis.__reworldTestEnv;' })); } }] });
   routes[name] = await import(pathToFileURL(process.cwd() + '/' + output));
@@ -39,6 +40,10 @@ for (const name of ['system', 'access', 'draws', 'member', 'member/login', 'memb
 after(() => { sql.close(); rmSync(directory, { recursive: true, force: true }); delete globalThis.__reworldTestEnv; });
 let ip = 0;
 async function call(route, method = 'GET', body, cookie = '', origin = 'https://reworld.test', fixedIp) {
+  if (route === 'draws' && method === 'POST' && !cookie.includes('reworld_guest=')) {
+    const session = await call('draws/status');
+    cookie += '; ' + session.cookie;
+  }
   const [name] = route.split('?');
   const response = await routes[name][method](new Request('https://reworld.test/api/' + route, { method, headers: { Origin: origin, 'Content-Type': 'application/json', Cookie: cookie, 'cf-connecting-ip': fixedIp ?? `test-ip-${ip++}` }, ...(body ? { body: JSON.stringify(body) } : {}) }));
   return { status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
@@ -191,4 +196,40 @@ test('registration without SMS keeps phone unverified and supports password logi
  assert.equal((await call('member/register','POST',{...body,phone:'0961234568',confirmPassword:'mismatch'})).status,400);
  sql.exec('UPDATE system_settings SET registration_enabled=0');assert.equal((await call('member/register','POST',{...body,phone:'0961234568'})).status,409);
  } finally {globalThis.__reworldTestEnv.SMS=sms;}
+});
+
+test('browser draw cooldown survives roles, accounts and IP changes, with atomic concurrent draws', async () => {
+  sql.prepare('UPDATE system_settings SET card_draw_enabled=1 WHERE id=1').run();
+  const browser=await call('draws/status');
+  assert.equal(browser.data.retryAfterSeconds,0);
+  assert.match(browser.cookie,/^reworld_guest=/);
+  const cookie=browser.cookie, fixedIp='same-wifi';
+  const user=await create();
+  const attempts=await Promise.all([
+    call('draws','POST',{role:'高級牛馬'},cookie,'https://reworld.test',fixedIp),
+    call('draws','POST',{role:'摸魚大師'},cookie+'; '+user,'https://reworld.test',fixedIp),
+  ]);
+  assert.deepEqual(attempts.map(r=>r.status).sort(),[201,429]);
+  const blocked=await call('draws','POST',{role:'人生勝利組'},cookie+'; '+user,'https://reworld.test','changed-ip');
+  assert.equal(blocked.status,429);
+  assert.ok(Number(blocked.headers.get('retry-after'))>10790);
+  const refreshed=await call('draws/status','GET',undefined,cookie);
+  assert.ok(refreshed.data.retryAfterSeconds>10790);
+  const other=(await call('draws/status')).cookie;
+  assert.equal((await call('draws','POST',{role:'畫餅充飢'},other,'https://reworld.test',fixedIp)).status,201);
+  const token=cookie.split('=')[1];
+  const id=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');
+  sql.prepare('UPDATE draw_cooldowns SET expires_at=? WHERE session_id=?').run(Date.now()-1,id);
+  assert.equal((await call('draws','POST',{role:'摸魚大師'},cookie)).status,201);
+  const fresh=(await call('draws/status')).cookie;
+  assert.equal((await call('draws','POST',{role:'invalid'},fresh)).status,400);
+  assert.equal((await call('draws/status','GET',undefined,fresh)).data.retryAfterSeconds,0);
+  sql.exec("CREATE TRIGGER fail_guest_draw BEFORE INSERT ON guest_draws BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
+  try { assert.equal((await call('draws','POST',{role:'摸魚大師'},fresh)).status,503); }
+  finally { sql.exec('DROP TRIGGER fail_guest_draw'); }
+  assert.equal((await call('draws/status','GET',undefined,fresh)).data.retryAfterSeconds,0);
+  assert.equal((await call('draws','POST',{role:'摸魚大師'},fresh)).status,201);
+  const missing=await routes.draws.POST(new Request('https://reworld.test/api/draws',{method:'POST',headers:{Origin:'https://reworld.test','Content-Type':'application/json'},body:JSON.stringify({role:'摸魚大師'})}));
+  assert.equal(missing.status,428);
+  assert.ok(missing.headers.get('set-cookie'));
 });

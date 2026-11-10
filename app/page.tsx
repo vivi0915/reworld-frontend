@@ -79,6 +79,31 @@ export default function HomePage() {
     catch { toast.error('角色已選擇，但紀錄暫時無法保存。'); }
   }
   const [drawing, setDrawing] = useState(false);
+  const [drawReady, setDrawReady] = useState(false);
+  const [drawWait, setDrawWait] = useState(0);
+  const cooldownUntil = useRef(0);
+  const cooldownRevision = useRef(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    const sync = async () => {
+      const revision = ++cooldownRevision.current;
+      try {
+        const response = await fetch('/api/draws/status', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error();
+        const data = await response.json() as { retryAfterSeconds: number };
+        if (controller.signal.aborted || revision !== cooldownRevision.current) return;
+        cooldownUntil.current = Date.now() + data.retryAfterSeconds * 1000;
+        setDrawWait(data.retryAfterSeconds); setDrawReady(true);
+      } catch { if (!controller.signal.aborted && revision === cooldownRevision.current) setDrawReady(false); }
+    };
+    void sync();
+    const poll = setInterval(() => { if (!document.hidden) void sync(); }, 30000);
+    const tick = setInterval(() => setDrawWait(Math.max(0, Math.ceil((cooldownUntil.current - Date.now()) / 1000))), 1000);
+    window.addEventListener('focus', sync);
+    return () => { controller.abort(); clearInterval(poll); clearInterval(tick); window.removeEventListener('focus', sync); };
+  }, []);
+  const drawWaitLabel = `${Math.floor(drawWait / 3600)}:${String(Math.floor(drawWait / 60) % 60).padStart(2, '0')}:${String(drawWait % 60).padStart(2, '0')}`;
+
   const [result, setResult] = useState<DrawRecord | null>(null);
   const [records, setRecords] = useState<DrawRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -175,7 +200,7 @@ export default function HomePage() {
   }
 
   async function drawReward() {
-    if (!selectedRole || actionBusy.current) return;
+    if (!selectedRole || actionBusy.current || !drawReady || drawWait > 0) return;
     actionBusy.current = true;
     const revision = accountRevision.current;
     setDrawing(true);
@@ -188,7 +213,12 @@ export default function HomePage() {
           role: selectedRole,
         }),
       });
-      const data = (await response.json()) as { record?: DrawRecord; error?: string };
+      const data = (await response.json()) as { record?: DrawRecord; error?: string; retryAfterSeconds?: number };
+      if (typeof data.retryAfterSeconds === 'number') {
+        ++cooldownRevision.current;
+        cooldownUntil.current = Date.now() + data.retryAfterSeconds * 1000;
+        setDrawWait(data.retryAfterSeconds);
+      }
       if (response.status === 401) { await refreshMember(); setTab("member"); }
       if (!response.ok || !data.record) throw new Error(data.error ?? "draw failed");
       await new Promise((resolve) => setTimeout(resolve, 900));
@@ -290,9 +320,9 @@ export default function HomePage() {
 
               {system && !system.card_draw_enabled && <p className="system-notice" role="status">CARD DRAW OFFLINE{system.maintenance_message && ` · ${system.maintenance_message}`}</p>}
               {!result ? (
-                <button className="primary-action" disabled={drawing || randomizing || !selectedRole || !system?.card_draw_enabled} onClick={drawReward}>
+                <button className="primary-action" disabled={drawing || randomizing || !selectedRole || !system?.card_draw_enabled || !drawReady || drawWait > 0} onClick={drawReward}>
                   <Sparkles size={18} />
-                  {drawing ? "正在抽取獎勵…" : randomizing ? "正在選擇角色…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇角色"}
+                  {drawing ? "正在抽取獎勵…" : !drawReady ? "正在確認抽獎資格…" : drawWait > 0 ? `下次抽獎 ${drawWaitLabel}` : randomizing ? "正在選擇角色…" : selectedRole ? `使用${selectedRole}抽取獎勵` : "請先選擇角色"}
                 </button>
               ) : (
                 <div className="reward-module" style={{ "--role-color": currentRole?.color } as React.CSSProperties}>
@@ -306,6 +336,7 @@ export default function HomePage() {
                 <Shuffle size={20} />{randomizing ? "命運選角中…" : "隨機選擇角色"}
               </button>
               <p className="guest-draw-note" role="status">{randomizing ? "燈框正在選擇角色…" : selectedRole ? `已選擇：${selectedRole}` : "四種角色，讓命運替你決定。"}</p>
+              <p className="guest-draw-note">同一瀏覽器每 3 小時可抽一次；更換角色或登入狀態不會重置。</p>
               {!member && <p className="guest-draw-note">不用登入也能抽獎；登入後的抽獎會保存至冒險紀錄。</p>}
             </div>
           )}
