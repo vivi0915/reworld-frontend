@@ -614,9 +614,9 @@ button:focus-visible { outline: 2px solid #7fd6ff; outline-offset: 3px; }
 .exploration-summary small { color: #adc1d6; overflow-wrap: anywhere; }
 .exploration-summary progress { width: 100%; height: 8px; accent-color: #16e0bc; }
 .world-completed { color: #8bffe8; }
-.menu-tile.exploration-locked, .menu-tile.exploration-revoked { background: #08101b; border-color: #39475a; color: #a4afbf; }
-.menu-tile.exploration-locked .tile-number, .menu-tile.exploration-revoked .tile-number { color: #8391a4; }
-.menu-tile.exploration-pending { border-color: #edb847; background: #282114; }
+/* Category colors remain visible in every member exploration state. */
+.menu-tile.exploration-locked .tile-state, .menu-tile.exploration-revoked .tile-state { color: #a4afbf; }
+.menu-tile.exploration-completed { background: color-mix(in srgb, var(--tile-color) 12%, #0b1829); }
 .menu-tile.exploration-pending .tile-state { color: #ffda7d; }
 .menu-tile.exploration-completed { border-color: var(--tile-color); box-shadow: inset 0 0 12px color-mix(in srgb,var(--tile-color) 20%,transparent), 0 0 9px color-mix(in srgb,var(--tile-color) 32%,transparent); }
 .menu-tile.selected { outline: 2px solid #e9f4ff; outline-offset: 2px; z-index: 1; }
