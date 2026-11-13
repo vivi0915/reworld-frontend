@@ -32,12 +32,21 @@ test('built Worker renders Guest home and protects admin routes with real D1', a
       const statements = sql.split('--> statement-breakpoint').map(value => value.trim()).filter(Boolean);
       await db.batch(statements.map(statement => db.prepare(statement)));
     }
-    const response = await worker.dispatchFetch('http://localhost/', { headers: { accept: 'text/html' } });
+    const response = await worker.dispatchFetch('http://localhost/home', { headers: { accept: 'text/html' } });
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(response.headers.get('content-type'), /^text\/html/);
     assert.match(html, /ACCESS/); assert.match(html, /GUEST/);
     assert.doesNotMatch(html, /scrypt-v1\$|code_hash|password_hash/);
+    const root = await worker.dispatchFetch('http://localhost/', { redirect: 'manual' });
+    assert.ok([307, 308].includes(root.status));
+    assert.equal(new URL(root.headers.get('location'), 'http://localhost').pathname, '/home');
+    for (const [route, heading] of [['roles','選擇'], ['menu','風味大富翁'], ['history','冒險紀錄'], ['member','會員註冊／登入']]) {
+      const page = await worker.dispatchFetch('http://localhost/' + route, { headers: { accept: 'text/html' } });
+      assert.equal(page.status, 200, route);
+      assert.ok((await page.text()).includes(heading), route + ' renders its own content');
+    }
+    assert.equal((await worker.dispatchFetch('http://localhost/not-a-tab')).status, 404);
     const state = await worker.dispatchFetch('http://localhost/api/system');
     assert.equal(state.status, 200);
     const settings = await state.json();
