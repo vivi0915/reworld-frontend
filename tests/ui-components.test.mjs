@@ -121,6 +121,7 @@ test("dice totals match clockwise travel for all starts and eligible destination
 test("menu order preserves existing exploration IDs", async () => {
   const {drinks}=await vite.ssrLoadModule("/lib/menu-catalog.ts");
   assert.deepEqual(drinks.filter(d=>d.number===1).map(d=>d.role),['摸魚大師','高級牛馬','畫餅充飢','人生勝利組']);
+  assert.deepEqual(drinks.filter(d=>d.number===1).map(d=>[d.code,d.id,d.color]), [['01','role-02-drink-1','#16e0bc'],['02','role-01-drink-1','#23a7ff'],['03','role-03-drink-1','#a861ff'],['04','role-04-drink-1','#ff7048']]);
   assert.deepEqual(drinks.filter(d=>d.code==='04').map(d=>[d.name,d.number,d.id,d.alcoholLevel]),[
     ['財富自由',1,'role-04-drink-2',1],
     ['富二代',2,'role-04-drink-1',2],

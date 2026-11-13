@@ -40,8 +40,8 @@ const roles: Array<{
   color: string;
   Icon: typeof Crown;
 }> = [
-  { name: "高級牛馬", code: "01", desc: "努力滿格，今晚犒賞自己", color: "#23a7ff", Icon: BriefcaseBusiness },
-  { name: "摸魚大師", code: "02", desc: "忙裡偷閒，快樂準時下班", color: "#16e0bc", Icon: Fish },
+  { name: "摸魚大師", code: "01", desc: "忙裡偷閒，快樂準時下班", color: "#16e0bc", Icon: Fish },
+  { name: "高級牛馬", code: "02", desc: "努力滿格，今晚犒賞自己", color: "#23a7ff", Icon: BriefcaseBusiness },
   { name: "畫餅充飢", code: "03", desc: "夢想很大，先來一杯再說", color: "#a861ff", Icon: ChartPie },
   { name: "人生勝利組", code: "04", desc: "自帶光環，今晚由你閃耀", color: "#ffb648", Icon: Crown },
 ];

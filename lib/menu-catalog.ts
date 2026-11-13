@@ -1,9 +1,9 @@
 // Persisted slot IDs stay attached to each drink independently of display order.
 const groups = [
-  { role: '摸魚大師', code: '02', color: '#16e0bc' },
-  { role: '高級牛馬', code: '01', color: '#23a7ff' },
-  { role: '畫餅充飢', code: '03', color: '#a861ff' },
-  { role: '人生勝利組', code: '04', color: '#ff7048' },
+  { role: '摸魚大師', code: '01', storageCode: '02', color: '#16e0bc' },
+  { role: '高級牛馬', code: '02', storageCode: '01', color: '#23a7ff' },
+  { role: '畫餅充飢', code: '03', storageCode: '03', color: '#a861ff' },
+  { role: '人生勝利組', code: '04', storageCode: '04', color: '#ff7048' },
 ];
 // Names originated in the menu sheet; ingredients and prices confirmed by the owner.
 // Public ingredient names only; quantities and preparation notes are omitted.
@@ -264,8 +264,8 @@ const recipes: Record<string, Array<{ name: string; englishName: string; english
     }
   ]
 };
-export const drinks = groups.flatMap(group => recipes[group.code].map((recipe, index) => ({
-  ...group, id: `role-${group.code}-drink-${recipe.slot}`, number: index + 1,
+export const drinks = groups.flatMap(group => recipes[group.storageCode].map((recipe, index) => ({
+  ...group, id: `role-${group.storageCode}-drink-${recipe.slot}`, number: index + 1,
   ...recipe, category: `${group.code} · ${group.role}專屬`,
   description: recipe.ingredients.join('、'),
   alcoholIntensity: ['酒輕', '酒中', '酒重'][(recipe.alcoholLevel ?? index + 1) - 1],
