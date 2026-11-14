@@ -38,3 +38,7 @@ Guest 可直接使用首頁、酒單、職業選擇、抽卡及符合營運條�
 ### 正式環境準備
 
 部署目標為使用者自己的 Cloudflare 帳號與網域。請在 GitHub production 環境設定 Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`，及變數 `REWORLD_D1_DATABASE_ID`。確認網域、D1 資料庫與既有資料移轉方案後，才能將 `REWORLD_DEPLOY_ENABLED` 設為 `true`。目前 chatgpt.site 的資料與管理員不會自動搬移；不得將私人管理員初始化遷移或密碼雜湊提交到公開 GitHub。
+
+### 分頁網址
+
+首頁 `/home`、選擇角色 `/roles`、菜單 `/menu`、冒險紀錄 `/history`、會員 `/member`。根網址 `/` 轉到 `/home`。每頁可直接分享及重新整理，分頁切換支援瀏覽器前進與返回。
